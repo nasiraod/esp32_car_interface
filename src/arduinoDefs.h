@@ -1,0 +1,2 @@
+#define ILLUMINATION_PIN 22
+#define IGNITION_PIN 23
