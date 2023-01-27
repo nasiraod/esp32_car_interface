@@ -13,8 +13,10 @@
 #define LOG_ATTACH_SERIAL(Serial)
 #include <DebugLog.h>
 #include <TaskScheduler.h>
+#include <Adafruit_MCP23X17.h>
 //#include <due_can.h>
 #define MAX_CAN_FRAME_DATA_LEN   8
+
 
 
 
@@ -24,6 +26,13 @@
 ////////////////////////////////
 hp_BH1750 lightSensor;
 ////////////////////////////////
+
+////////////////////////////////
+//////GPIO Expander Object//////
+////////////////////////////////
+Adafruit_MCP23X17 inputExpander0;
+////////////////////////////////
+
 
 ////////////////////////////////
 /////Nextion Display Pages//////
@@ -115,6 +124,14 @@ float pitch=0;
 int NXTpage=1;
 ////////////////////////////////
 
+////////////////////////////////
+////////////Tasks///////////////
+////////////////////////////////
+Task NXTTask(0, TASK_FOREVER, &nextionScreenSendSCH);
+Task sensorsTask(0, TASK_FOREVER, &sensorAcqSCH);
+
+Scheduler runnerSCH;
+////////////////////////////////
 
 void setup() {
 	// initialize both serial ports:
@@ -122,8 +139,8 @@ void setup() {
 	Serial1.begin(9600);
 	interfaceScreen.begin(9600);
 	Serial.println("Car Interface Test");
-	//Scheduler.startLoop(raspSerialListenerSCH);
-	//Scheduler.startLoop(nextionScreenSendSCH);
+	
+
 	/* for (int i = 0; i < sizeof(switches) / sizeof(switches[0]); i++) {
 		pinMode(switches[i].pin, OUTPUT);
 	}*/
@@ -136,7 +153,23 @@ void setup() {
 	lightSensor.calibrateTiming();
 	lightSensor.start();
 	delay(50);
+	
+	
+	
+	
+	//Scheduler.startLoop(raspSerialListenerSCH);
+	//Scheduler.startLoop(nextionScreenSendSCH);
 	//Scheduler.startLoop(sensorAcqSCH);
+	runnerSCH.init();
+	LOG_DEBUG("Scheduler Initialized");
+	runnerSCH.addTask(NXTTask);
+	LOG_DEBUG("Nextion Task added");
+	runnerSCH.addTask(sensorsTask);
+	NXTTask.enable();
+	sensorsTask.enable();
+	
+
+	
 
 	/*if (Can0.begin(CAN_BPS_250K))  {
 	  }
@@ -150,7 +183,8 @@ void setup() {
 void loop() {
 	//Serial.write("Main Loop!\n");
 	//getGyroData();
-	delay(1000);
+	//delay(1000);
+	runnerSCH.execute();
 
 }
 
@@ -235,7 +269,8 @@ void nextionScreenSendSCH() {
 		break;
 	}
 	delay(50);
-	yield();
+	//LOG_DEBUG("NXT Task");
+	//yield();
 }
 
 
@@ -359,6 +394,7 @@ void sensorAcqSCH() {
 
 
 void handleSwitchEvent (int incomingSwitch) {
+	LOG_DEBUG("Switches invoked");
 	switch (switches[incomingSwitch].devLoc) {
 	case GPIO_CAN:
 		/*CAN_FRAME commandOut;

@@ -10,6 +10,8 @@
             "includePath": [
                 "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/include",
                 "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/src",
+                "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/.pio/libdeps/esp32doit-devkit-v1/ACAN_ESP32/src",
+                "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/.pio/libdeps/esp32doit-devkit-v1/Adafruit MCP23017 Arduino Library/src",
                 "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/.pio/libdeps/esp32doit-devkit-v1/TaskScheduler/src",
                 "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/.pio/libdeps/esp32doit-devkit-v1/DebugLog",
                 "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/.pio/libdeps/esp32doit-devkit-v1/hp_BH1750/src",
@@ -250,6 +252,8 @@
                 "path": [
                     "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/include",
                     "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/src",
+                    "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/.pio/libdeps/esp32doit-devkit-v1/ACAN_ESP32/src",
+                    "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/.pio/libdeps/esp32doit-devkit-v1/Adafruit MCP23017 Arduino Library/src",
                     "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/.pio/libdeps/esp32doit-devkit-v1/TaskScheduler/src",
                     "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/.pio/libdeps/esp32doit-devkit-v1/DebugLog",
                     "C:/Users/nasir/Documents/PlatformIO/Projects/ESP32_CAR_INTERFACE/.pio/libdeps/esp32doit-devkit-v1/hp_BH1750/src",
