@@ -16,9 +16,8 @@
 #include <Adafruit_MCP23X17.h>
 //#include <due_can.h>
 #define MAX_CAN_FRAME_DATA_LEN   8
-
-
-
+#include <ACAN_ESP32.h>
+#include <core_version.h>
 
 
 ////////////////////////////////
@@ -71,8 +70,7 @@ struct switchStruct{
 	int devLoc;
 	int address;
 	int pin;
-  int physicalType;
-
+	int physicalType;
 };
 enum switchTypes{
 	TOGGLE,
@@ -96,6 +94,13 @@ struct switchStruct switches[] = {
 		{ "P1_SW3", TOGGLE, false, true, GPIO_CAN, 0x7FF, 3, BUTTON },						// Rear Toggle SW
 		{ "P1_SW4", TOGGLE, false, true, GPIO_CAN, 0x7FF, 4, BUTTON }						// Rock Toggle SW
 };
+
+enum switchSource{
+	DISPLAY,
+	EXT_IO
+}
+
+
 ////////////////////////////////
 
 
@@ -122,6 +127,9 @@ char inByte[BUFFER_SIZE];
 float roll=0;
 float pitch=0;
 int NXTpage=1;
+//  CAN ESP32 Desired Bit Rate
+static const uint32_t DESIRED_BIT_RATE = 1000UL * 250UL ; // 250 Kb/s
+
 ////////////////////////////////
 
 ////////////////////////////////
@@ -168,8 +176,19 @@ void setup() {
 	NXTTask.enable();
 	sensorsTask.enable();
 	
-
+	LOG_DEBUG("Configure ESP32 CAN");
+	ACAN_ESP32_Settings settings (250 * 1000) ;
+	//settings.mRxPin = GPIO_NUM_4 ; // Optional, default Tx pin is GPIO_NUM_4
+	//settings.mTxPin = GPIO_NUM_5 ; // Optional, default Rx pin is GPIO_NUM_5
+	settings.mRequestedCANMode = ACAN_ESP32_Settings::LoopBackMode ;
+	const uint32_t errorCode = ACAN_ESP32::can.begin (settings) ;
 	
+	if (errorCode == 0) {
+		LOG_DEBUG("Configuration ESP32 OK!");
+	}else{
+		LOG_ERROR("Configuration error");
+		LOG_ERROR(errorCode, HEX);
+	}
 
 	/*if (Can0.begin(CAN_BPS_250K))  {
 	  }
@@ -378,7 +397,7 @@ void sensorAcqSCH() {
 	currentSensorData.gyroRoll=(long)roll;
 	currentSensorData.gyroTemp = "";
 	currentSensorData.gyroTemp.concat((int)temp.temperature);
-
+	delay(50);
 	//Light sensor Acquisition
 	if (lightSensor.hasValue()) {
 		currentSensorData.lightLux = "";
@@ -389,14 +408,25 @@ void sensorAcqSCH() {
 
 	}
 	delay(50);
-	yield();
 }
 
 
 void handleSwitchEvent (int incomingSwitch) {
+	CANMessage frame;
+	bool ok;
+	frame.id= 0x7FF;
+	frame.len = 8;
+	//ACAN_ESP32::can.tryToSend (frame) ;
+	
 	LOG_DEBUG("Switches invoked");
 	switch (switches[incomingSwitch].devLoc) {
 	case GPIO_CAN:
+		frame.id= switches[incomingSwitch].address;
+		frame.len = MAX_CAN_FRAME_DATA_LEN;
+		frame.data16[0] = switches[incomingSwitch].state ^ switches[incomingSwitch].activeLow;
+		frame.data16[1] = switches[incomingSwitch].pin;
+		frame.data16[2] = 0x0000;
+		frame.data16[3] = 0x0000;
 		/*CAN_FRAME commandOut;
 		commandOut.id = 0x7FF;
 		commandOut.length = MAX_CAN_FRAME_DATA_LEN;
@@ -406,6 +436,11 @@ void handleSwitchEvent (int incomingSwitch) {
 		commandOut.data.s3 = 0x0000;
 		commandOut.extended = 0;
 		//Can0.sendFrame(commandOut);*/
+		ok = ACAN_ESP32::can.tryToSend (frame) ;
+		if(ok) {
+			LOG_DEBUG("CAN MESSAGE SENT");
+		}
+		
 		break;
 	case GPIO_LOCAL:
 		digitalWrite(switches[incomingSwitch].pin, switches[incomingSwitch].state ^ switches[incomingSwitch].activeLow);
