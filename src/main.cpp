@@ -75,17 +75,15 @@ struct switchStruct{
 enum switchTypes{
 	TOGGLE,
 	BUTTON,
-  NONE,
+	NONE,
 	OTHER
-
 };
 enum deviceLocation{
 	GPIO_LOCAL,
 	GPIO_CAN,
-  GPIO_EXP_LOCAL,
+	GPIO_EXP_LOCAL,
 	TTL_RELAY_LOCAL,
 	TTL_RELAY_CAN
-
 };
 struct switchStruct switches[] = {
 		{ "P1_SW0", TOGGLE, true, true, GPIO_CAN, 0x7FF, 0, BUTTON },						// Roof Toggle SW
@@ -96,9 +94,9 @@ struct switchStruct switches[] = {
 };
 
 enum switchSource{
-	DISPLAY,
+	GUI_DISPLAY,
 	EXT_IO
-}
+};
 
 
 ////////////////////////////////
@@ -111,7 +109,7 @@ void raspPacketParser(int numBytes);
 void nextionScreenSendSCH();
 void sensorAcqSCH();
 void gyroSetup();
-void handleSwitchEvent (int incomingSwitch);
+void handleSwitchEvent (int incomingSwitch, int triggerSource);
 void raspSerialListenerSCH();
 //void getGyroData();
 void indexSWError();
@@ -326,7 +324,7 @@ void trigger0(){
 			tempLog.concat(switches[sw].activeLow);
 			LOG_DEBUG(tempLog);
 
-			handleSwitchEvent(sw);
+			handleSwitchEvent(sw, GUI_DISPLAY);
 
 
 
@@ -370,7 +368,7 @@ void trigger1(){
 		LOG_DEBUG("trigger1 - Initializing Switches");
 		for (int i = 0; i < sizeof(switches) / sizeof(switches[0]); i++) {
 			interfaceScreen.writeNum(String(switches[i].NXTName + ".val"), (int)switches[i].state);
-			handleSwitchEvent(i);
+			handleSwitchEvent(i, GUI_DISPLAY);
 			//digitalWrite(switches[i].pin, switches[i].state ^ switches[i].activeLow);   //
 		}
 
@@ -411,7 +409,7 @@ void sensorAcqSCH() {
 }
 
 
-void handleSwitchEvent (int incomingSwitch) {
+void handleSwitchEvent (int incomingSwitch, int triggerSource) {
 	CANMessage frame;
 	bool ok;
 	frame.id= 0x7FF;
@@ -423,18 +421,39 @@ void handleSwitchEvent (int incomingSwitch) {
 	case GPIO_CAN:
 		frame.id= switches[incomingSwitch].address;
 		frame.len = MAX_CAN_FRAME_DATA_LEN;
+		/* Following is how the CAN packet is sent in sequence, please refer to CAN_PACKET.png for the scope capture
+		frame.data[0] = 0x01;
+		frame.data[1] = 0x23;
+		frame.data[2] = 0x45;
+		frame.data[3] = 0x67;
+		frame.data[4] = 0x89;
+		frame.data[5] = 0xAB;
+		frame.data[6] = 0xCD;
+		frame.data[7] = 0xEF;
+		frame.data16[0] = 0x2301;
+		frame.data16[1] = 0x6745;
+		frame.data16[2] = 0xAB89;
+		frame.data16[3] = 0xEFCD;
+		frame.data32[0] = 0x67452301;
+		frame.data32[1] = 0xEFCDAB89;
+		frame.data64 = 0xEFCDAB8967452301;*/
+
 		frame.data16[0] = switches[incomingSwitch].state ^ switches[incomingSwitch].activeLow;
 		frame.data16[1] = switches[incomingSwitch].pin;
 		frame.data16[2] = 0x0000;
 		frame.data16[3] = 0x0000;
+		
+		
+
+
 		/*CAN_FRAME commandOut;
-		commandOut.id = 0x7FF;
+		/*commandOut.id = 0x7FF;
 		commandOut.length = MAX_CAN_FRAME_DATA_LEN;
-		commandOut.data.s0 = switches[incomingSwitch].state ^ switches[incomingSwitch].activeLow;
-		commandOut.data.s1 = switches[incomingSwitch].pin;
-		commandOut.data.s2 = 0x0000;
-		commandOut.data.s3 = 0x0000;
-		commandOut.extended = 0;
+		commandOut.data.s0 = 0x0123;
+		commandOut.data.s1 = 0x4567;
+		commandOut.data.s2 = 0x89AB;
+		commandOut.data.s3 = 0xCDEF;
+		commandOut.extended = 0;*/
 		//Can0.sendFrame(commandOut);*/
 		ok = ACAN_ESP32::can.tryToSend (frame) ;
 		if(ok) {
