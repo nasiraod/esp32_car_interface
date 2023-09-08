@@ -145,6 +145,11 @@ void setup() {
 	Serial1.begin(9600);
 	interfaceScreen.begin(9600);
 	Serial.println("Car Interface Test");
+	if (!inputExpander0.begin_I2C(0x20)) {
+		LOG_DEBUG("Error.");
+		while (1);
+	}
+	inputExpander0.pinMode(1, INPUT);
 	
 
 	/* for (int i = 0; i < sizeof(switches) / sizeof(switches[0]); i++) {
@@ -216,15 +221,6 @@ void raspSerialListenerSCH() {
 		//Serial.write(inByte);
 		//char * inByteCh = inByte;
 		raspPacketParser(numBytes);
-
-
-
-
-
-
-
-
-
 
 	}
 	// read from port 0, send to port 1:
@@ -457,7 +453,11 @@ void handleSwitchEvent (int incomingSwitch, int triggerSource) {
 		//Can0.sendFrame(commandOut);*/
 		ok = ACAN_ESP32::can.tryToSend (frame) ;
 		if(ok) {
+			// char temp[] = "";
+			// sprintf(temp, "CAN MESSAGE SENT: %x", frame.id);
 			LOG_DEBUG("CAN MESSAGE SENT");
+			// LOG_DEBUG(temp);
+
 		}
 		
 		break;
