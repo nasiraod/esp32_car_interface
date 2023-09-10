@@ -18,6 +18,8 @@
 #define MAX_CAN_FRAME_DATA_LEN   8
 #include <ACAN_ESP32.h>
 #include <core_version.h>
+#include "soc/rtc_wdt.h"
+
 
 
 ////////////////////////////////
@@ -27,9 +29,9 @@ hp_BH1750 lightSensor;
 ////////////////////////////////
 
 ////////////////////////////////
-//////GPIO Expander Object//////
+/////GPIO Expander Objects//////
 ////////////////////////////////
-Adafruit_MCP23X17 inputExpander0;
+Adafruit_MCP23X17 input_expanders[3];
 ////////////////////////////////
 
 
@@ -38,13 +40,6 @@ Adafruit_MCP23X17 inputExpander0;
 ////////////////////////////////
 bool halt = false;
 EasyNex interfaceScreen(Serial2);
-enum NXTPages {
-	SPLASH,
-	START,
-	MAIN,
-	SETTINGS,
-	INTERIOR
-};
 ////////////////////////////////
 
 ////////////////////////////////
@@ -62,45 +57,82 @@ struct sensorData {
 ////////////////////////////////
 ///////////Switches/////////////
 ////////////////////////////////
-struct switchStruct{
-	String NXTName;
-	int NXTType;
-	bool state;
-	bool activeLow;
-	int devLoc;
-	int address;
-	int pin;
-	int physicalType;
-};
-enum switchTypes{
-	TOGGLE,
-	BUTTON,
-	NONE,
-	OTHER
-};
-enum deviceLocation{
-	GPIO_LOCAL,
-	GPIO_CAN,
-	GPIO_EXP_LOCAL,
-	TTL_RELAY_LOCAL,
-	TTL_RELAY_CAN
-};
-struct switchStruct switches[] = {
-		{ "P1_SW0", TOGGLE, true, true, GPIO_CAN, 0x7FF, 0, BUTTON },						// Roof Toggle SW
-		{ "P1_SW1", TOGGLE, false, true, GPIO_CAN, 0x7FF, 1, BUTTON },						// Bumper Toggle SW
-		{ "P1_SW2", TOGGLE, false, true, GPIO_CAN, 0x7FF, 2, BUTTON },						// Ditch Toggle SW
-		{ "P1_SW3", TOGGLE, false, true, GPIO_CAN, 0x7FF, 3, BUTTON },						// Rear Toggle SW
-		{ "P1_SW4", TOGGLE, false, true, GPIO_CAN, 0x7FF, 4, BUTTON }						// Rock Toggle SW
+class Switch {
+	public:
+		String nextion_name;
+		int nextion_type;
+		bool state;
+		bool active_low;
+		int pin_location;
+		int address;
+		int input_expander;
+		int input_pin;
+		int input_led;
+		int output_pin;
+		int physical_type;
+		Switch(String nextion_name, int nextion_type, bool state, bool active_low, int pin_location, int address, int input_expander, int input_pin, int input_led, int output_pin, int physical_type) {
+			this -> nextion_name = nextion_name;
+			this -> nextion_type = nextion_type;
+			this -> state = state;
+			this -> active_low = active_low;
+			this -> pin_location = pin_location;
+			this -> address = address;
+			this -> input_expander = input_expander;
+			this -> input_pin = input_pin;
+			this -> input_led = input_led;
+			this -> output_pin = output_pin;
+			this -> physical_type = physical_type;
+		}
+		bool handle_switch_event(int source) {
+			CANMessage frame;
+			bool ok;
+			// frame.id = address;
+			//ACAN_ESP32::can.tryToSend (frame) ;
+			
+			LOG_DEBUG("Switches invoked");
+			switch (pin_location) {
+			case GPIO_CAN:
+				frame.id= address;
+				frame.len = MAX_CAN_FRAME_DATA_LEN;
+				frame.data16[0] = state ^ active_low;
+				frame.data16[1] = output_pin;
+				frame.data16[2] = 0x0000;
+				frame.data16[3] = 0x0000;
+				ok = ACAN_ESP32::can.tryToSend (frame) ;
+				if(ok) {
+					// char temp[] = "";
+					// sprintf(temp, "CAN MESSAGE SENT: %x", frame.id);
+					LOG_DEBUG("CAN MESSAGE SENT: ", ok);
+					// LOG_DEBUG(temp);
+
+				}
+				
+				break;
+			case GPIO_LOCAL:
+				LOG_DEBUG("GPIO_LOCAL");
+				// digitalWrite(switches[incomingSwitch].output_pin, switches[incomingSwitch].state ^ switches[incomingSwitch].active_low);
+				digitalWrite(output_pin, state ^ active_low);
+				break;
+			}
+			return true;
+		}
+
 };
 
-enum switchSource{
-	GUI_DISPLAY,
-	EXT_IO
+Switch switches[] = {
+	Switch( "P1_SW0", TOGGLE, true, true, GPIO_CAN, 0x7FF, 0, 0, 65, 0, BUTTON),					// Roof Toggle SW
+	Switch( "P1_SW1", TOGGLE, false, true, GPIO_CAN, 0x7FF, 0, 1, 65, 1, BUTTON ),					// Bumper Toggle SW
+	Switch( "P1_SW2", TOGGLE, false, true, GPIO_CAN, 0x7FF, 0, 2, 65, 2, BUTTON ),					// Ditch Toggle SW
+	Switch( "P1_SW3", TOGGLE, false, true, GPIO_CAN, 0x7FF, 0, 3, 65, 3, BUTTON ),					// Rear Toggle SW
+	Switch( "P1_SW4", TOGGLE, false, true, GPIO_CAN, 0x7FF, 0, 4, 65, 4, BUTTON )					// Rock Toggle SW
 };
 
 
-////////////////////////////////
 
+
+
+bool interrupt_trigger = false;
+interrupt_sources interrupt_source;
 
 ////////////////////////////////
 ///////Function Definitions/////
@@ -108,12 +140,14 @@ enum switchSource{
 void raspPacketParser(int numBytes);
 void nextionScreenSendSCH();
 void sensorAcqSCH();
+void interruptSCH();
 void gyroSetup();
 void handleSwitchEvent (int incomingSwitch, int triggerSource);
-void raspSerialListenerSCH();
-//void getGyroData();
+// void raspSerialListenerSCH();
+// void getGyroData();
 void indexSWError();
 float mapF(float x, float in_min, float in_max, float out_min, float out_max);
+void IRAM_ATTR isrD18();
 ////////////////////////////////
 
 ////////////////////////////////
@@ -121,12 +155,12 @@ float mapF(float x, float in_min, float in_max, float out_min, float out_max);
 ////////////////////////////////
 struct sensorData currentSensorData;
 const int BUFFER_SIZE = 128;
-char inByte[BUFFER_SIZE];
+// char inByte[BUFFER_SIZE];
 float roll=0;
 float pitch=0;
 int NXTpage=1;
 //  CAN ESP32 Desired Bit Rate
-static const uint32_t DESIRED_BIT_RATE = 1000UL * 250UL ; // 250 Kb/s
+// static const uint32_t DESIRED_BIT_RATE = 1000UL * 250UL ; // 250 Kb/s
 
 ////////////////////////////////
 
@@ -135,54 +169,64 @@ static const uint32_t DESIRED_BIT_RATE = 1000UL * 250UL ; // 250 Kb/s
 ////////////////////////////////
 Task NXTTask(0, TASK_FOREVER, &nextionScreenSendSCH);
 Task sensorsTask(0, TASK_FOREVER, &sensorAcqSCH);
+Task interruptTask(0, TASK_FOREVER, &interruptSCH);
 
 Scheduler runnerSCH;
 ////////////////////////////////
+void io_init() {
+	LOG_DEBUG("Initializing IOs");
+	pinMode(GPIO_EXPANDER0_RST_PIN, OUTPUT);
+	digitalWrite(GPIO_EXPANDER0_RST_PIN, LOW);
+	delay(50);
+	digitalWrite(GPIO_EXPANDER0_RST_PIN, HIGH);
+	int count = 0;
+	while (true) {
+		count++;
+		if (count >= 10 || input_expanders[0].begin_I2C(0x20)) break;
+		LOG_DEBUG("GPIO Expander: Error Initializing");
+		delay(100);
 
-void setup() {
-	// initialize both serial ports:
-	Serial.begin(115200);
-	Serial1.begin(9600);
-	interfaceScreen.begin(9600);
-	Serial.println("Car Interface Test");
-	if (!inputExpander0.begin_I2C(0x20)) {
-		LOG_DEBUG("Error.");
-		while (1);
 	}
-	inputExpander0.pinMode(1, INPUT);
-	
-
-	/* for (int i = 0; i < sizeof(switches) / sizeof(switches[0]); i++) {
-		pinMode(switches[i].pin, OUTPUT);
-	}*/
+	input_expanders[0].setupInterrupts(true, false, LOW);
+	input_expanders[0].pinMode(1, INPUT_PULLDOWN);
+	input_expanders[0].setupInterruptPin(1, HIGH);
+	pinMode(GPIO_EXPANDER0_INT_PIN, INPUT_PULLUP);
+	attachInterrupt(GPIO_EXPANDER0_INT_PIN, isrD18, FALLING);
 	pinMode(ILLUMINATION_PIN, INPUT_PULLUP);
 	pinMode(IGNITION_PIN, INPUT_PULLUP);
 
+}
+void setup() {
+	// initialize both serial ports:
+	
+	Serial.begin(115200);
+	// Serial1.begin(9600);
+	interfaceScreen.begin(9600);
+	Serial.println("Car Interface Test");
+	io_init();
 	gyroSetup();
 	interfaceScreen.writeStr("page 0");
 	lightSensor.begin(BH1750_TO_GROUND);
 	lightSensor.calibrateTiming();
 	lightSensor.start();
 	delay(50);
-	
-	
-	
-	
-	//Scheduler.startLoop(raspSerialListenerSCH);
-	//Scheduler.startLoop(nextionScreenSendSCH);
-	//Scheduler.startLoop(sensorAcqSCH);
+
 	runnerSCH.init();
 	LOG_DEBUG("Scheduler Initialized");
 	runnerSCH.addTask(NXTTask);
 	LOG_DEBUG("Nextion Task added");
 	runnerSCH.addTask(sensorsTask);
+	runnerSCH.addTask(interruptTask);
 	NXTTask.enable();
 	sensorsTask.enable();
+	interruptTask.enable();
+	
 	
 	LOG_DEBUG("Configure ESP32 CAN");
 	ACAN_ESP32_Settings settings (250 * 1000) ;
 	//settings.mRxPin = GPIO_NUM_4 ; // Optional, default Tx pin is GPIO_NUM_4
 	//settings.mTxPin = GPIO_NUM_5 ; // Optional, default Rx pin is GPIO_NUM_5
+	// TODO: Change CAN to Normal Mode for transmission error handling, would require changing the switch event class method
 	settings.mRequestedCANMode = ACAN_ESP32_Settings::LoopBackMode ;
 	const uint32_t errorCode = ACAN_ESP32::can.begin (settings) ;
 	
@@ -193,69 +237,20 @@ void setup() {
 		LOG_ERROR(errorCode, HEX);
 	}
 
-	/*if (Can0.begin(CAN_BPS_250K))  {
-	  }
-	  else {
-	    Serial.println("CAN initialization (sync) ERROR");
-	  }
-	Can0.watchFor(0x7FF);
-*/
 }
 
 void loop() {
 	//Serial.write("Main Loop!\n");
 	//getGyroData();
 	//delay(1000);
+	// LOG_DEBUG(inputExpander0.getLastInterruptPin(), " ", inputExpander0.getCapturedInterrupt());
 	runnerSCH.execute();
 
 }
 
 
 
-void raspSerialListenerSCH() {
-	// read from port 1, send to port 0:
-	if (Serial1.available()) {
-		//String inByte = Serial1.readString();
-		int numBytes = Serial1.readBytesUntil(TERMINATOR, inByte, BUFFER_SIZE);
-		//Serial.println(inByte);
-		//Serial.write(inByte);
-		//char * inByteCh = inByte;
-		raspPacketParser(numBytes);
 
-	}
-	// read from port 0, send to port 1:
-	if (Serial.available()) {
-		int inByte = Serial.read();
-		Serial1.write(inByte);
-	}
-	yield();
-}
-//Data Packet: <HEADER_TYPE><COMMAND><DATA_TYPE><ELEMENT><NUMBER_DATA_BYTES><DATA><TERMINATOR>
-
-void raspPacketParser(int numBytes) {
-	switch (inByte[0]) {
-	case CONFIG:
-		Serial.write("Config command received!\n");
-		if (inByte[1] == GET) {
-			Serial.write("Config get command received!\n");
-		}
-		else if (inByte[1] == SET) {
-			Serial.write("Config set command received!\n");
-		}
-		else
-			Serial.write("Invalid command!\n");
-
-		break;
-	case STATE:
-		Serial.write("State command received!\n");
-		break;
-	default:
-		// block of code default: do something when var is not equal to any of above label
-		break;
-	}
-	//Done Parsing, empty buffer
-	memset(inByte, 0, BUFFER_SIZE);
-}
 void nextionScreenSendSCH() {
 	interfaceScreen.NextionListen();
 	NXTpage=interfaceScreen.currentPageId;
@@ -296,56 +291,36 @@ void trigger0(){
 	halt = true;
 	String tempLog;
 	if (sw != -1) {
-		switch(switches[sw].NXTType) {
+		switch(switches[sw].nextion_type) {
 		case TOGGLE:
-			//tempLog.concat("Toggle Switch - Index: ");
-			//tempLog.concat(sw);
-
-			//LOG_DEBUG("Toggle Switch");
-			//LOG_DEBUG("trigger0 - Index: ", sw);
-			//Serial.print(interfaceScreen.readByte());
-			//Serial.println(interfaceScreen.readByte());
-			switches[sw].state = interfaceScreen.readNumber(String(switches[sw].NXTName + ".val"));
-			//LOG_DEBUG("trigger0 - Value: ", switches[sw].state); //Serial.println(switches[sw].state);
-			//LOG_DEBUG("trigger0 - Switch Name: ", String(switches[sw].name + ".val")); //Serial.println(String(switches[sw].name + ".val"));
-			//LOG_DEBUG("trigger0 - Active Low: ", switches[sw].activeLow);
+			switches[sw].state = interfaceScreen.readNumber(String(switches[sw].nextion_name + ".val"));
 			tempLog = "";
 			tempLog.concat("Toggle Switch - Index: ");
 			tempLog.concat(sw);
 			tempLog.concat(" - Value: ");
 			tempLog.concat(switches[sw].state);
 			tempLog.concat(" - Switch Name: ");
-			tempLog.concat(String(switches[sw].NXTName + ".val"));
+			tempLog.concat(String(switches[sw].nextion_name + ".val"));
 			tempLog.concat(" - Active Low: ");
-			tempLog.concat(switches[sw].activeLow);
+			tempLog.concat(switches[sw].active_low);
 			LOG_DEBUG(tempLog);
-
-			handleSwitchEvent(sw, GUI_DISPLAY);
-
-
-
+			switches[sw].handle_switch_event(GUI_DISPLAY);
 
 			break;
 		case BUTTON:
-			//LOG_DEBUG("Not implemented");
+			LOG_DEBUG("Not implemented");
 			break;
 		}
-
-
-
 	}
 	else
 		indexSWError();
 	delay(50);
 	halt = false;
-
-
-
 }
 void indexSWError() {
 	LOG_ERROR("indexSWError - Error Occurred, Reinitializing Switches");
 	for (int i = 0; i < sizeof(switches) / sizeof(switches[0]); i++) {
-		interfaceScreen.writeNum(String(switches[i].NXTName + ".val"), (int)switches[i].state);
+		interfaceScreen.writeNum(String(switches[i].nextion_name + ".val"), (int)switches[i].state);
 	}
 }
 
@@ -363,9 +338,10 @@ void trigger1(){
 		//Init Switches
 		LOG_DEBUG("trigger1 - Initializing Switches");
 		for (int i = 0; i < sizeof(switches) / sizeof(switches[0]); i++) {
-			interfaceScreen.writeNum(String(switches[i].NXTName + ".val"), (int)switches[i].state);
-			handleSwitchEvent(i, GUI_DISPLAY);
-			//digitalWrite(switches[i].pin, switches[i].state ^ switches[i].activeLow);   //
+			interfaceScreen.writeNum(String(switches[i].nextion_name + ".val"), (int)switches[i].state);
+			// handleSwitchEvent(i, GUI_DISPLAY);
+			switches[i].handle_switch_event(GUI_DISPLAY);
+			//digitalWrite(switches[i].pin, switches[i].state ^ switches[i].active_low);   //
 		}
 
 
@@ -403,73 +379,6 @@ void sensorAcqSCH() {
 	}
 	delay(50);
 }
-
-
-void handleSwitchEvent (int incomingSwitch, int triggerSource) {
-	CANMessage frame;
-	bool ok;
-	frame.id= 0x7FF;
-	frame.len = 8;
-	//ACAN_ESP32::can.tryToSend (frame) ;
-	
-	LOG_DEBUG("Switches invoked");
-	switch (switches[incomingSwitch].devLoc) {
-	case GPIO_CAN:
-		frame.id= switches[incomingSwitch].address;
-		frame.len = MAX_CAN_FRAME_DATA_LEN;
-		/* Following is how the CAN packet is sent in sequence, please refer to CAN_PACKET.png for the scope capture
-		frame.data[0] = 0x01;
-		frame.data[1] = 0x23;
-		frame.data[2] = 0x45;
-		frame.data[3] = 0x67;
-		frame.data[4] = 0x89;
-		frame.data[5] = 0xAB;
-		frame.data[6] = 0xCD;
-		frame.data[7] = 0xEF;
-		frame.data16[0] = 0x2301;
-		frame.data16[1] = 0x6745;
-		frame.data16[2] = 0xAB89;
-		frame.data16[3] = 0xEFCD;
-		frame.data32[0] = 0x67452301;
-		frame.data32[1] = 0xEFCDAB89;
-		frame.data64 = 0xEFCDAB8967452301;*/
-
-		frame.data16[0] = switches[incomingSwitch].state ^ switches[incomingSwitch].activeLow;
-		frame.data16[1] = switches[incomingSwitch].pin;
-		frame.data16[2] = 0x0000;
-		frame.data16[3] = 0x0000;
-		
-		
-
-
-		/*CAN_FRAME commandOut;
-		/*commandOut.id = 0x7FF;
-		commandOut.length = MAX_CAN_FRAME_DATA_LEN;
-		commandOut.data.s0 = 0x0123;
-		commandOut.data.s1 = 0x4567;
-		commandOut.data.s2 = 0x89AB;
-		commandOut.data.s3 = 0xCDEF;
-		commandOut.extended = 0;*/
-		//Can0.sendFrame(commandOut);*/
-		ok = ACAN_ESP32::can.tryToSend (frame) ;
-		if(ok) {
-			// char temp[] = "";
-			// sprintf(temp, "CAN MESSAGE SENT: %x", frame.id);
-			LOG_DEBUG("CAN MESSAGE SENT");
-			// LOG_DEBUG(temp);
-
-		}
-		
-		break;
-	case GPIO_LOCAL:
-		digitalWrite(switches[incomingSwitch].pin, switches[incomingSwitch].state ^ switches[incomingSwitch].activeLow);
-		break;
-	}
-}
-
-
-
-
 
 
 
@@ -550,4 +459,33 @@ void gyroSetup() {
 }
 
 
+void IRAM_ATTR isrD18() {
+	interrupt_source = D18;
+	interrupt_trigger = true;
+}
 
+void interruptSCH() {
+	if (interrupt_trigger) {
+		switch(interrupt_source) {
+			case D18:
+			int current_pin = input_expanders[0].getLastInterruptPin();
+			int current_value = input_expanders[0].getCapturedInterrupt();
+			LOG_DEBUG("D18 ISR: ", current_pin, " ", current_value);
+			interrupt_trigger = false;
+			delay(100);
+			int count = 0;
+			while (true) {
+				input_expanders[0].clearInterrupts();
+				if (input_expanders[0].getLastInterruptPin() == 255) break;
+				delay(100);
+			}
+			// input_expanders[0].clearInterrupts();
+			// LOG_DEBUG("D18 After Clear: ", input_expanders[0].getLastInterruptPin(), " ", input_expanders[0].getCapturedInterrupt());
+			break;
+
+		}
+		
+	}
+	delay(50);
+	
+}

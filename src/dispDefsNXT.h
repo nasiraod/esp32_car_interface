@@ -1,4 +1,11 @@
 #define PITCH_ORIGIN_Y 315
+enum NXTPages {
+	SPLASH,
+	START,
+	MAIN,
+	SETTINGS,
+	INTERIOR
+};
 
 //#define SPLASH 0
 //#define START 1
