@@ -1,6 +1,6 @@
 #include <Arduino.h>
-#define ILLUMINATION_PIN 22
-#define IGNITION_PIN 35
+// #define ILLUMINATION_PIN 22
+#define IGNITION_PIN 19
 #define GPIO_EXPANDER0_RST_PIN 13
 #define GPIO_EXPANDER0_INT_PIN 25
 #define GPIO_EXPANDER0_ADDRESS 0x22
@@ -13,25 +13,26 @@ struct gpio_expander_param {
     uint8_t RST_PIN;
     uint8_t INT_PIN;
     uint8_t I2C_ADDRESS;
-    uint8_t BASE_ADDRESS;
+    uint8_t BASE_INDEX;
     bool INTERRUPTABLE;
 };
 struct gpio_expander_param gpio_expander_hw[] {
-    {13, 25, 0x22, 0, true}
+    {12, 23, 0x21, 0, true},
+    {13, 25, 0x22, 16, true}
 };
 struct gpio_defintions {
-    int gpio_expander;
-    String pin_name;
-    String pin_function;
-    int pin_number;
+    uint8_t gpio_expander;
+    char pin_name[5];
+    char pin_function[20];
+    uint8_t pin_number;
     int pin_direction;
     bool interrupt_pin;
     bool interrupt_high;
     int switch_index;     
 };
 struct gpio_defintions gpio_expander_io_map[] = {
-    {0, "GPA0", "EXT_IN_GPIO1",     0,      INPUT,                true, false, 0},
-    {0, "GPA1", "EXT_IN_GPIO2",     1,      INPUT,              false, false, 1},
+    {0, "GPA0", "EXT_IN_GPIO1",     0,      INPUT,              false, false, -1},
+    {0, "GPA1", "EXT_IN_GPIO2",     1,      INPUT,              false, false, -1},
     {0, "GPA2", "EXT_IN_GPIO3",     2,      INPUT,              false, false, -1},
     {0, "GPA3", "EXT_IN_GPIO4",     3,      INPUT,              false, false, -1},
     {0, "GPA4", "EXT_IN_GPIO5",     4,      INPUT,              false, false, -1},
@@ -45,23 +46,23 @@ struct gpio_defintions gpio_expander_io_map[] = {
     {0, "GPB4", "LED_GPIO_SW3",     12,     OUTPUT,             false, false, -1},
     {0, "GPB5", "LED_GPIO_SW4",     13,     OUTPUT,             false, false, -1},
     {0, "GPB6", "LED_GPIO_SW5",     14,     OUTPUT,             false, false, -1},
-    {0, "GPB7", "LED_GPIO_SW6",     15,     OUTPUT,             false, false, -1}//,
-    // {1, "GPA0", "EXT_SW_GPIO1",     0,      INPUT,             false, false, -1},
-    // {1, "GPA1", "EXT_SW_GPIO2",     1,      INPUT, false, false, -1},
-    // {1, "GPA2", "EXT_SW_GPIO3",     2,      INPUT, false, false, -1},
-    // {1, "GPA3", "EXT_SW_GPIO4",     3,      INPUT, false, false, -1},
-    // {1, "GPA4", "EXT_SW_GPIO5",     4,      INPUT, false, false, -1},
-    // {1, "GPA5", "EXT_SW_GPIO6",     5,      INPUT, false, false, -1},
-    // {1, "GPA6", "EXT_SW_GPIO7",     6,      INPUT, false, false, -1},
-    // {1, "GPA7", "EXT_SW_GPIO8",     7,      INPUT, false, false, -1},
-    // {1, "GPB0", "EXT_SW_GPIO9",     8,      INPUT, false, false, -1},
-    // {1, "GPB1", "EXT_SW_GPIO10",    9,      INPUT, false, false, -1},
-    // {1, "GPB2", "LED_GPIO_SW7",     10,     OUTPUT, false, false, -1},
-    // {1, "GPB3", "LED_GPIO_SW8",     11,     OUTPUT, false, false, -1},
-    // {1, "GPB4", "LED_GPIO_SW9",     12,     OUTPUT, false, false, -1},
-    // {1, "GPB5", "LED_GPIO_SW10",    13,     OUTPUT, false, false, -1},
-    // {1, "GPB6", "NA",               14,     OUTPUT, false, false, -1},
-    // {1, "GPB7", "NA",               15,     OUTPUT, false, false, -1},
+    {0, "GPB7", "LED_GPIO_SW6",     15,     OUTPUT,             false, false, -1},
+    {1, "GPA0", "EXT_SW_GPIO1",     0,      INPUT,              true, false, 0},
+    {1, "GPA1", "EXT_SW_GPIO2",     1,      INPUT,              false, false, 1},
+    {1, "GPA2", "EXT_SW_GPIO3",     2,      INPUT,              false, false, 2},
+    {1, "GPA3", "EXT_SW_GPIO4",     3,      INPUT,              false, false, 3},
+    {1, "GPA4", "EXT_SW_GPIO5",     4,      INPUT,              false, false, 4},
+    {1, "GPA5", "EXT_SW_GPIO6",     5,      INPUT,              false, false, -1},
+    {1, "GPA6", "EXT_SW_GPIO7",     6,      INPUT,              false, false, -1},
+    {1, "GPA7", "EXT_SW_GPIO8",     7,      INPUT,              false, false, -1},
+    {1, "GPB0", "EXT_SW_GPIO9",     8,      INPUT,              false, false, -1},
+    {1, "GPB1", "EXT_SW_GPIO10",    9,      INPUT,              false, false, -1},
+    {1, "GPB2", "LED_GPIO_SW7",     10,     OUTPUT,             false, false, -1},
+    {1, "GPB3", "LED_GPIO_SW8",     11,     OUTPUT,             false, false, -1},
+    {1, "GPB4", "LED_GPIO_SW9",     12,     OUTPUT,             false, false, -1},
+    {1, "GPB5", "LED_GPIO_SW10",    13,     OUTPUT,             false, false, -1},
+    {1, "GPB6", "NA",               14,     OUTPUT,             false, false, -1},
+    {1, "GPB7", "NA",               15,     OUTPUT,             false, false, -1}//,
     // {2, "GPA0", "EXT_OUT_NEG1",     0,      OUTPUT, false, false, -1},
     // {2, "GPA1", "EXT_OUT_NEG2",     1,      OUTPUT, false, false, -1},
     // {2, "GPA2", "EXT_OUT_NEG3",     2,      OUTPUT, false, false, -1},
@@ -112,7 +113,8 @@ enum switchSource{
 
 
 enum interrupt_sources {
-	GPIO_EXPANDER0,
+	GPIO_EXPANDER,
+    GPIO_EXPANDER0,
     GPIO_EXPANDER1,
     GPIO_EXPANDER2
 };

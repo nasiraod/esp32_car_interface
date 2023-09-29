@@ -161,6 +161,7 @@ Switch switches[] = {
 bool interrupt_trigger = false;
 interrupt_sources interrupt_source;
 int gpio_pin;
+int gpio_expander_number;
 
 ////////////////////////////////
 ///////Function Definitions/////
@@ -198,11 +199,11 @@ int NXTpage=1;
 ////////////////////////////////
 void *nextionScreenSendSCH(void *threadid);
 void *sensorAcqSCH(void *threadid);
-void *interruptSCH(void *threadid);
+// void *interruptSCH(void *threadid);
 void *bluetooth_handler_loop(void *threadid);
 pthread_t nxt_thread;
 pthread_t sensors_thread;
-pthread_t interrupt_thread;
+// pthread_t interrupt_thread;
 pthread_t bluetooth_thread;
 // Task NXTTask(0, TASK_FOREVER, &nextionScreenSendSCH);
 // Task sensorsTask(0, TASK_FOREVER, &sensorAcqSCH);
@@ -341,9 +342,16 @@ void io_init() {
 		LOG_DEBUG(temp_log_message);
 	}
 	
-	pinMode(GPIO_EXPANDER0_INT_PIN, INPUT_PULLUP);
-	attachInterrupt(GPIO_EXPANDER0_INT_PIN, isr_gpio_expander0, FALLING);
-	pinMode(ILLUMINATION_PIN, INPUT_PULLUP);
+	pinMode(gpio_expander_hw[0].INT_PIN, INPUT_PULLUP);
+	attachInterrupt(gpio_expander_hw[0].INT_PIN, isr_gpio_expander0, FALLING);
+
+	pinMode(gpio_expander_hw[1].INT_PIN, INPUT_PULLUP);
+	attachInterrupt(gpio_expander_hw[1].INT_PIN, isr_gpio_expander1, FALLING);
+
+	// pinMode(gpio_expander_hw[2].INT_PIN, INPUT_PULLUP);
+	// attachInterrupt(gpio_expander_hw[2].INT_PIN, isr_gpio_expander2, FALLING);
+
+	// pinMode(ILLUMINATION_PIN, INPUT_PULLUP);
 	pinMode(IGNITION_PIN, INPUT_PULLUP);
 
 }
@@ -443,7 +451,7 @@ void loop() {
 	}
 	delay(1000);
 	voltage = 0.00485 * analogRead(36) + 0.76864;
-	LOG_DEBUG("Voltage:", voltage, "V");
+	// LOG_DEBUG("Voltage:", voltage, "V");
 	// LOG_DEBUG("Light: ", currentSensorData.lightLux, "Gyro Temp: ", currentSensorData.gyroTemp, "Gyro Pitch: ", currentSensorData.gyroPitch, "Gyro Roll: ", currentSensorData.gyroRoll);
 
 	// runnerSCH.execute();
@@ -561,33 +569,59 @@ void trigger1(){
 	delay(50);
 }
 
+void IRAM_ATTR isr_gpio_expander0() {
+	interrupt_source = GPIO_EXPANDER;
+	gpio_expander_number = 0;
+	interrupt_trigger = true;
+}
+void IRAM_ATTR isr_gpio_expander1() {
+	interrupt_source = GPIO_EXPANDER;
+	gpio_expander_number = 1;
+	interrupt_trigger = true;
+}
+void IRAM_ATTR isr_gpio_expander2() {
+	interrupt_source = GPIO_EXPANDER;
+	gpio_expander_number = 2;
+	interrupt_trigger = true;
+}
+void handle_input_interrupt_event(int gpio_expander_index) {
+	LOG_DEBUG("Current MAP Index:", gpio_expander_index, gpio_expander_io_map[gpio_expander_index].pin_function);
+	if (gpio_expander_io_map[gpio_expander_index].switch_index >= 0 && gpio_expander_io_map[gpio_expander_index].switch_index <= 99){
+		switches[gpio_expander_io_map[gpio_expander_index].switch_index].handle_switch_event(EXT_IO_LOCAL_BUTTON);
+	}
+}
 
 void *sensorAcqSCH(void *threadid) {
 	LOG_DEBUG("Thread Running on Core: ", xPortGetCoreID());
 	float roll=0;
 	float pitch=0;
+	int current_pin;
+	int current_value;
+	sensors_event_t a, g, temp;
 	while (true) {
 		//Gyro Acquisition, limit setting, and data perperation
 		if (interrupt_trigger) {
 			switch(interrupt_source) {
-				case GPIO_EXPANDER0:
-				int current_pin = io_expanders[0].getLastInterruptPin();
-				int current_value = io_expanders[0].getCapturedInterrupt();
-				LOG_DEBUG("GPIO_EXPANDER0 ISR: ", current_pin, " ", current_value);
+				case GPIO_EXPANDER:
+				current_pin = io_expanders[gpio_expander_number].getLastInterruptPin();
+				current_value = io_expanders[gpio_expander_number].getCapturedInterrupt();
+				LOG_DEBUG("GPIO_EXPANDER ISR: ", gpio_expander_number, current_pin, current_value);
 				interrupt_trigger = false;
 				delay(100);			
 				while (true) {
-					io_expanders[0].clearInterrupts();
-					if (io_expanders[0].getLastInterruptPin() == 255) break;
+					io_expanders[gpio_expander_number].clearInterrupts();
+					if (io_expanders[gpio_expander_number].getLastInterruptPin() == 255) break;
 					delay(100);
 				}
-				if (current_pin >= GPIO_EXPANDER0_BASE_ADDRESS && current_pin < GPIO_EXPANDER0_BASE_ADDRESS + 16 && gpio_expander_io_map[current_pin].switch_index != -1) {
-					LOG_DEBUG(switches[gpio_expander_io_map[current_pin].switch_index].nextion_name);
-					halt = true;
-					switches[gpio_expander_io_map[current_pin].switch_index].handle_switch_event(EXT_IO_LOCAL_BUTTON);
-				} else {
-					LOG_ERROR("Index out of bound");
-				}
+				if (current_pin >= 0 && current_pin <= 15) handle_input_interrupt_event(current_pin + gpio_expander_hw[gpio_expander_number].BASE_INDEX);
+				else LOG_ERROR("Index out of bound");
+				// if (current_pin >= GPIO_EXPANDER0_BASE_ADDRESS && current_pin < GPIO_EXPANDER0_BASE_ADDRESS + 16 && gpio_expander_io_map[current_pin].switch_index != -1) {
+				// 	LOG_DEBUG(switches[gpio_expander_io_map[current_pin].switch_index].nextion_name);
+				// 	halt = true;
+				// 	switches[gpio_expander_io_map[current_pin].switch_index].handle_switch_event(EXT_IO_LOCAL_BUTTON);
+				// } else {
+				// 	LOG_ERROR("Index out of bound");
+				// }
 				
 				// io_expanders[0].clearInterrupts();
 				// LOG_DEBUG("D18 After Clear: ", io_expanders[0].getLastInterruptPin(), " ", io_expanders[0].getCapturedInterrupt());
@@ -598,13 +632,13 @@ void *sensorAcqSCH(void *threadid) {
 		halt = false;
 		} else {
 		
-			sensors_event_t a, g, temp;
+			
 			gyroSensor.getEvent(&a, &g, &temp);
 			roll=mapF(a.acceleration.y,-10,10,0,180);
 			pitch=mapF(a.acceleration.x,-5.55,5.55,PITCH_ORIGIN_Y+50,PITCH_ORIGIN_Y-50);
 			if (pitch > PITCH_ORIGIN_Y+50) pitch = PITCH_ORIGIN_Y+50;
 			if (pitch < PITCH_ORIGIN_Y-50) pitch = PITCH_ORIGIN_Y-50;
-			currentSensorData.gyroPitch=(long)pitch;
+			currentSensorData.gyroPitch=(long)pitch; 
 			currentSensorData.gyroRoll=(long)roll;
 			currentSensorData.gyroTemp = "";
 			currentSensorData.gyroTemp.concat((int)temp.temperature);
@@ -712,54 +746,45 @@ void sensors_init() {
 }
 
 
-void IRAM_ATTR isr_gpio_expander0() {
-	interrupt_source = GPIO_EXPANDER0;
-	interrupt_trigger = true;
-}
-void IRAM_ATTR isr_gpio_expander1() {
-	interrupt_source = GPIO_EXPANDER1;
-	interrupt_trigger = true;
-}
-void IRAM_ATTR isr_gpio_expander2() {
-	interrupt_source = GPIO_EXPANDER2;
-	interrupt_trigger = true;
-}
 
-void *interruptSCH(void *threadid) {
-	LOG_DEBUG("Thread Running on Core: ", xPortGetCoreID());
-	while (true) {
-		if (interrupt_trigger) {
-			switch(interrupt_source) {
-				case GPIO_EXPANDER0:
-				int current_pin = io_expanders[0].getLastInterruptPin();
-				int current_value = io_expanders[0].getCapturedInterrupt();
-				LOG_DEBUG("GPIO_EXPANDER0 ISR: ", current_pin, " ", current_value);
-				interrupt_trigger = false;
-				delay(100);			
-				while (true) {
-					io_expanders[0].clearInterrupts();
-					if (io_expanders[0].getLastInterruptPin() == 255) break;
-					delay(100);
-				}
-				if (current_pin >= GPIO_EXPANDER0_BASE_ADDRESS && current_pin < GPIO_EXPANDER0_BASE_ADDRESS + 16 && gpio_expander_io_map[current_pin].switch_index != -1) {
-					LOG_DEBUG(switches[gpio_expander_io_map[current_pin].switch_index].nextion_name);
-					switches[gpio_expander_io_map[current_pin].switch_index].handle_switch_event(EXT_IO_LOCAL_BUTTON);
-				} else {
-					LOG_ERROR("Index out of bound");
-				}
+
+// void *interruptSCH(void *threadid) {
+// 	LOG_DEBUG("Thread Running on Core: ", xPortGetCoreID());
+// 	int current_pin;
+// 	int current_value;
+// 	while (true) {
+// 		if (interrupt_trigger) {
+// 			switch(interrupt_source) {
+// 				case GPIO_EXPANDER0:
+// 				current_pin = io_expanders[0].getLastInterruptPin();
+// 				current_value = io_expanders[0].getCapturedInterrupt();
+// 				LOG_DEBUG("GPIO_EXPANDER0 ISR: ", current_pin, " ", current_value);
+// 				interrupt_trigger = false;
+// 				delay(100);			
+// 				while (true) {
+// 					io_expanders[0].clearInterrupts();
+// 					if (io_expanders[0].getLastInterruptPin() == 255) break;
+// 					delay(100);
+// 				}
+// 				if (current_pin >= GPIO_EXPANDER0_BASE_ADDRESS && current_pin < GPIO_EXPANDER0_BASE_ADDRESS + 16 && gpio_expander_io_map[current_pin].switch_index != -1) {
+// 					LOG_DEBUG(switches[gpio_expander_io_map[current_pin].switch_index].nextion_name);
+// 					switches[gpio_expander_io_map[current_pin].switch_index].handle_switch_event(EXT_IO_LOCAL_BUTTON);
+// 				} else {
+// 					LOG_ERROR("Index out of bound");
+// 				}
 				
-				// io_expanders[0].clearInterrupts();
-				// LOG_DEBUG("D18 After Clear: ", io_expanders[0].getLastInterruptPin(), " ", io_expanders[0].getCapturedInterrupt());
-				break;
+// 				// io_expanders[0].clearInterrupts();
+// 				// LOG_DEBUG("D18 After Clear: ", io_expanders[0].getLastInterruptPin(), " ", io_expanders[0].getCapturedInterrupt());
+// 				break;
 
-			}
+// 			}
 			
-		}
-		delay(200);
-	}
-	return 0;
+// 		}
+// 		delay(200);
+// 	}
+// 	return 0;
 	
-}
+// }
 void *bluetooth_handler_loop(void *threadid) {
 	LOG_DEBUG("Thread Running on Core: ", xPortGetCoreID());
 	String incoming_bluetooth;
