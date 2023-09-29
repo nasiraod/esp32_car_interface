@@ -182,4 +182,11 @@
  C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/soc/esp32/include/soc/rtc_io_struct.h \
  C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/soc/esp32/include/soc/rtc_cntl_reg.h \
  C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/soc/esp32/include/soc/rtc_cntl_struct.h \
- C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/soc/esp32/include/soc/sens_struct.h
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/soc/esp32/include/soc/sens_struct.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/libraries/BluetoothSerial/src/BluetoothSerial.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/bt/host/bluedroid/api/include/api/esp_gap_bt_api.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/bt/host/bluedroid/api/include/api/esp_bt_defs.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/bt/host/bluedroid/api/include/api/esp_spp_api.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/libraries/BluetoothSerial/src/BTScan.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/libraries/BluetoothSerial/src/BTAddress.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/libraries/BluetoothSerial/src/BTAdvertisedDevice.h

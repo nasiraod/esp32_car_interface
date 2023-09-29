@@ -1,7 +1,84 @@
+#include <Arduino.h>
 #define ILLUMINATION_PIN 22
 #define IGNITION_PIN 35
-#define GPIO_EXPANDER0_RST_PIN 23
-#define GPIO_EXPANDER0_INT_PIN 18
+#define GPIO_EXPANDER0_RST_PIN 13
+#define GPIO_EXPANDER0_INT_PIN 25
+#define GPIO_EXPANDER0_ADDRESS 0x22
+#define GPIO_EXPANDER0_BASE_ADDRESS 0
+#define GPIO_EXPANDER1_BASE_ADDRESS 16
+#define GPIO_EXPANDER2_BASE_ADDRESS 32
+#define GPIO_I2C_SDA 32
+#define GPIO_I2C_SCL 33
+struct gpio_expander_param {
+    uint8_t RST_PIN;
+    uint8_t INT_PIN;
+    uint8_t I2C_ADDRESS;
+    uint8_t BASE_ADDRESS;
+    bool INTERRUPTABLE;
+};
+struct gpio_expander_param gpio_expander_hw[] {
+    {13, 25, 0x22, 0, true}
+};
+struct gpio_defintions {
+    int gpio_expander;
+    String pin_name;
+    String pin_function;
+    int pin_number;
+    int pin_direction;
+    bool interrupt_pin;
+    bool interrupt_high;
+    int switch_index;     
+};
+struct gpio_defintions gpio_expander_io_map[] = {
+    {0, "GPA0", "EXT_IN_GPIO1",     0,      INPUT,                true, false, 0},
+    {0, "GPA1", "EXT_IN_GPIO2",     1,      INPUT,              false, false, 1},
+    {0, "GPA2", "EXT_IN_GPIO3",     2,      INPUT,              false, false, -1},
+    {0, "GPA3", "EXT_IN_GPIO4",     3,      INPUT,              false, false, -1},
+    {0, "GPA4", "EXT_IN_GPIO5",     4,      INPUT,              false, false, -1},
+    {0, "GPA5", "EXT_IN_GPIO6",     5,      INPUT,              false, false, -1},
+    {0, "GPA6", "EXT_IN_GPIO7",     6,      INPUT,              false, false, -1},
+    {0, "GPA7", "EXT_IN_GPIO8",     7,      INPUT,              false, false, -1},
+    {0, "GPB0", "EXT_IN_GPIO9",     8,      INPUT,              false, false, -1},
+    {0, "GPB1", "EXT_IN_GPIO10",    9,      INPUT,              false, false, -1},
+    {0, "GPB2", "LED_GPIO_SW1",     10,     OUTPUT,             false, false, -1},
+    {0, "GPB3", "LED_GPIO_SW2",     11,     OUTPUT,             false, false, -1},
+    {0, "GPB4", "LED_GPIO_SW3",     12,     OUTPUT,             false, false, -1},
+    {0, "GPB5", "LED_GPIO_SW4",     13,     OUTPUT,             false, false, -1},
+    {0, "GPB6", "LED_GPIO_SW5",     14,     OUTPUT,             false, false, -1},
+    {0, "GPB7", "LED_GPIO_SW6",     15,     OUTPUT,             false, false, -1}//,
+    // {1, "GPA0", "EXT_SW_GPIO1",     0,      INPUT,             false, false, -1},
+    // {1, "GPA1", "EXT_SW_GPIO2",     1,      INPUT, false, false, -1},
+    // {1, "GPA2", "EXT_SW_GPIO3",     2,      INPUT, false, false, -1},
+    // {1, "GPA3", "EXT_SW_GPIO4",     3,      INPUT, false, false, -1},
+    // {1, "GPA4", "EXT_SW_GPIO5",     4,      INPUT, false, false, -1},
+    // {1, "GPA5", "EXT_SW_GPIO6",     5,      INPUT, false, false, -1},
+    // {1, "GPA6", "EXT_SW_GPIO7",     6,      INPUT, false, false, -1},
+    // {1, "GPA7", "EXT_SW_GPIO8",     7,      INPUT, false, false, -1},
+    // {1, "GPB0", "EXT_SW_GPIO9",     8,      INPUT, false, false, -1},
+    // {1, "GPB1", "EXT_SW_GPIO10",    9,      INPUT, false, false, -1},
+    // {1, "GPB2", "LED_GPIO_SW7",     10,     OUTPUT, false, false, -1},
+    // {1, "GPB3", "LED_GPIO_SW8",     11,     OUTPUT, false, false, -1},
+    // {1, "GPB4", "LED_GPIO_SW9",     12,     OUTPUT, false, false, -1},
+    // {1, "GPB5", "LED_GPIO_SW10",    13,     OUTPUT, false, false, -1},
+    // {1, "GPB6", "NA",               14,     OUTPUT, false, false, -1},
+    // {1, "GPB7", "NA",               15,     OUTPUT, false, false, -1},
+    // {2, "GPA0", "EXT_OUT_NEG1",     0,      OUTPUT, false, false, -1},
+    // {2, "GPA1", "EXT_OUT_NEG2",     1,      OUTPUT, false, false, -1},
+    // {2, "GPA2", "EXT_OUT_NEG3",     2,      OUTPUT, false, false, -1},
+    // {2, "GPA3", "EXT_OUT_NEG4",     3,      OUTPUT, false, false, -1},
+    // {2, "GPA4", "EXT_OUT_NEG5",     4,      OUTPUT, false, false, -1},
+    // {2, "GPA5", "EXT_OUT_NEG6",     5,      OUTPUT, false, false, -1},
+    // {2, "GPA6", "EXT_OUT_NEG7",     6,      OUTPUT, false, false, -1},
+    // {2, "GPA7", "EXT_OUT_NEG8",     7,      OUTPUT, false, false, -1},
+    // {2, "GPB0", "OUT_POS_GPIO1",    8,      OUTPUT, false, false, -1},
+    // {2, "GPB1", "OUT_POS_GPIO2",    9,      OUTPUT, false, false, -1},
+    // {2, "GPB2", "OUT_POS_GPIO3",    10,     OUTPUT, false, false, -1},
+    // {2, "GPB3", "OUT_POS_GPIO4",    11,     OUTPUT, false, false, -1},
+    // {2, "GPB4", "OUT_POS_GPIO5",    12,     OUTPUT, false, false, -1},
+    // {2, "GPB5", "OUT_POS_GPIO6",    13,     OUTPUT, false, false, -1},
+    // {2, "GPB6", "OUT_POS_GPIO7",    14,     OUTPUT, false, false, -1},
+    // {2, "GPB7", "OUT_POS_GPIO8",    15,     OUTPUT, false, false, -1}
+};
 
 
 
@@ -11,6 +88,11 @@ enum switchTypes{
 	BUTTON,
 	NONE,
 	OTHER
+};
+enum ilumination_states{
+	NIGHT,
+	MEDIUM,
+	DAY
 };
 enum deviceLocation{
 	GPIO_LOCAL,
@@ -23,13 +105,16 @@ enum deviceLocation{
 enum switchSource{
 	GUI_DISPLAY,
     CAN_IO,
-	EXT_IO
+	EXT_IO,
+    EXT_IO_LOCAL_BUTTON,
+    BLUETOOTH_DEVICE
 };
 
 
 enum interrupt_sources {
-	D18,
-	D23
+	GPIO_EXPANDER0,
+    GPIO_EXPANDER1,
+    GPIO_EXPANDER2
 };
 
 
@@ -48,9 +133,9 @@ enum interrupt_sources {
 	bool active_low;
 	int pin_location;
 	int address;
-	int input_expander;
-	int input_pin;
-	int output_pin;
+	int INPUT, false, false_expander;
+	int INPUT, false, false_pin;
+	int OUTPUT, false, false_pin;
 	int physical_type;
 };*/
 
@@ -108,7 +193,7 @@ frame.data64 = 0xEFCDAB8967452301;*/
 // 		frame.data64 = 0xEFCDAB8967452301;*/
 
 // 		frame.data16[0] = switches[incomingSwitch].state ^ switches[incomingSwitch].active_low;
-// 		frame.data16[1] = switches[incomingSwitch].output_pin;
+// 		frame.data16[1] = switches[incomingSwitch].OUTPUT, false, false_pin;
 // 		frame.data16[2] = 0x0000;
 // 		frame.data16[3] = 0x0000;
 		
@@ -135,7 +220,7 @@ frame.data64 = 0xEFCDAB8967452301;*/
 		
 // 		break;
 // 	case GPIO_LOCAL:
-// 		digitalWrite(switches[incomingSwitch].output_pin, switches[incomingSwitch].state ^ switches[incomingSwitch].active_low);
+// 		digitalWrite(switches[incomingSwitch].OUTPUT, false, false_pin, switches[incomingSwitch].state ^ switches[incomingSwitch].active_low);
 // 		break;
 // 	}
 // }
