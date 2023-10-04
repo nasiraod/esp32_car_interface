@@ -12,7 +12,7 @@
 #define DEBUGLOG_DEFAULT_LOG_LEVEL_DEBUG
 #define LOG_ATTACH_SERIAL(Serial)
 #include <DebugLog.h>
-#include <TaskScheduler.h>
+// #include <TaskScheduler.h>
 #include <Adafruit_MCP23X17.h>
 //#include <due_can.h>
 #define MAX_CAN_FRAME_DATA_LEN   8
@@ -67,6 +67,7 @@ struct sensorData {
 	long gyroPitch;
 	String gyroTemp;
 	String lightLux;
+	float voltage;
 };
 ////////////////////////////////
 
@@ -82,11 +83,11 @@ class Switch {
 		int pin_location;
 		int address;
 		int input_pin;
-		int input_led;
+		int output_led;
 		int output_pin;
 		int physical_type;
 		String switch_function;
-		Switch(String nextion_name, int nextion_type, bool state, bool active_low, int pin_location, int address, int input_pin, int input_led, int output_pin, int physical_type, String switch_function) {
+		Switch(String nextion_name, int nextion_type, bool state, bool active_low, int pin_location, int address, int input_pin, int output_led, int output_pin, int physical_type, String switch_function) {
 			this -> nextion_name = nextion_name;
 			this -> nextion_type = nextion_type;
 			this -> state = state;
@@ -94,7 +95,7 @@ class Switch {
 			this -> pin_location = pin_location;
 			this -> address = address;
 			this -> input_pin = input_pin;
-			this -> input_led = input_led;
+			this -> output_led = output_led;
 			this -> output_pin = output_pin;
 			this -> physical_type = physical_type;
 			this -> switch_function = switch_function;
@@ -112,7 +113,13 @@ class Switch {
 					interfaceScreen.writeNum(String(nextion_name + ".val"), (int)state);
 					LOG_DEBUG("Screen Current Value: ", interfaceScreen.readNumber(String(nextion_name + ".val")));
 				}
+				
 				break;
+			}
+			if (output_led != -1) {
+				gpio_defintions temp_gpio;
+				temp_gpio = gpio_expander_io_map[output_led];
+				io_expanders[temp_gpio.gpio_expander].digitalWrite(temp_gpio.pin_number, state);
 			}
 			
 			LOG_DEBUG("Switches invoked");
@@ -127,17 +134,12 @@ class Switch {
 				frame.data16[3] = 0x0000;
 				ok = ACAN_ESP32::can.tryToSend (frame) ;
 				if(ok) {
-					// char temp[] = "";
-					// sprintf(temp, "CAN MESSAGE SENT: %x", frame.id);
 					LOG_DEBUG("CAN MESSAGE SENT: ", ok);
-					// LOG_DEBUG(temp);
-
 				}
 				
 				break;
 			case GPIO_LOCAL:
 				LOG_DEBUG("GPIO_LOCAL");
-				// digitalWrite(switches[incomingSwitch].output_pin, switches[incomingSwitch].state ^ switches[incomingSwitch].active_low);
 				digitalWrite(output_pin, state ^ active_low);
 				break;
 			}
@@ -147,11 +149,11 @@ class Switch {
 };
 
 Switch switches[] = {
-	Switch( "P1_SW0", TOGGLE, true, true, GPIO_CAN, 0x7FF, 0, 65, 0, BUTTON, "Roof Lights"),					// Roof Toggle SW
-	Switch( "P1_SW1", TOGGLE, false, true, GPIO_CAN, 0x7FF, 1, 65, 1, BUTTON, "Bumper Lights"),					// Bumper Toggle SW
-	Switch( "P1_SW2", TOGGLE, false, true, GPIO_CAN, 0x7FF, 2, 65, 2, BUTTON, "Ditch Lights"),					// Ditch Toggle SW
-	Switch( "P1_SW3", TOGGLE, false, true, GPIO_CAN, 0x7FF, 3, 65, 3, BUTTON, "Rear Lights"),					// Rear Toggle SW
-	Switch( "P1_SW4", TOGGLE, false, true, GPIO_CAN, 0x7FF, 4, 65, 4, BUTTON, "Rock Lights")					// Rock Toggle SW
+	Switch( "P1_SW0", TOGGLE, true, false, GPIO_CAN, 0x7FF, 0, 10, 7, BUTTON, "Roof Lights"),					// Roof Toggle SW
+	Switch( "P1_SW1", TOGGLE, false, false, GPIO_CAN, 0x7FF, 1, 11, 6, BUTTON, "Bumper Lights"),					// Bumper Toggle SW
+	Switch( "P1_SW2", TOGGLE, false, false, GPIO_CAN, 0x7FF, 2, 12, 5, BUTTON, "Ditch Lights"),					// Ditch Toggle SW
+	Switch( "P1_SW3", TOGGLE, false, false, GPIO_CAN, 0x7FF, 3, 13, 4, BUTTON, "Rear Lights"),					// Rear Toggle SW
+	Switch( "P1_SW4", TOGGLE, false, false, GPIO_CAN, 0x7FF, 4, 14, 3, BUTTON, "Rock Lights")					// Rock Toggle SW
 };
 
 
@@ -166,7 +168,7 @@ int gpio_expander_number;
 ////////////////////////////////
 ///////Function Definitions/////
 ////////////////////////////////
-
+void led_sequence();
 void sensors_init();
 // void handleSwitchEvent (int incomingSwitch, int triggerSource);
 // void raspSerialListenerSCH();
@@ -197,55 +199,18 @@ int NXTpage=1;
 ////////////////////////////////
 ////////////Tasks///////////////
 ////////////////////////////////
-void *nextionScreenSendSCH(void *threadid);
-void *sensorAcqSCH(void *threadid);
+void *nextion_screen_thread(void *threadid);
+void *sensor_acquisition_thread(void *threadid);
 // void *interruptSCH(void *threadid);
-void *bluetooth_handler_loop(void *threadid);
+void *bluetooth_handler_thread(void *threadid);
 pthread_t nxt_thread;
 pthread_t sensors_thread;
 // pthread_t interrupt_thread;
 pthread_t bluetooth_thread;
-// Task NXTTask(0, TASK_FOREVER, &nextionScreenSendSCH);
-// Task sensorsTask(0, TASK_FOREVER, &sensorAcqSCH);
-// Task interruptTask(0, TASK_FOREVER, &interruptSCH);
-// Task bluetooth_handler_task(0, TASK_FOREVER, &bluetooth_handler_loop);
-
-// struct task_pair {
-// 	Task task;
-// 	String name;
-// };
-// task_pair tasks[] = {
-// 	{Task(0, TASK_FOREVER, &nextionScreenSendSCH), "Nextion Screen Task"},
-// 	{Task(0, TASK_FOREVER, &sensorAcqSCH), "Sensor Acquisition Task"},
-// 	{Task(0, TASK_FOREVER, &interruptSCH), "Interrupt Handler Task"},
-// 	{Task(0, TASK_FOREVER, &bluetooth_handler_loop), "Bluetooth Handler Task"}
-// }
 
 
-Scheduler runnerSCH;
-////////////////////////////////
-/*void bluetooth_init() {
-	LOG_DEBUG("Starting BLE work!");
-	BLEDevice::init("Long name works now");
-	BLEServer *pServer = BLEDevice::createServer();
-	BLEService *pService = pServer->createService(SERVICE_UUID);
-	BLECharacteristic *pCharacteristic = pService->createCharacteristic(
-											CHARACTERISTIC_UUID,
-											BLECharacteristic::PROPERTY_READ |
-											BLECharacteristic::PROPERTY_WRITE
-										);
 
-	pCharacteristic->setValue("Hello World says Neil");
-	pService->start();
-	// BLEAdvertising *pAdvertising = pServer->getAdvertising();  // this still is working for backward compatibility
-	BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-	pAdvertising->addServiceUUID(SERVICE_UUID);
-	pAdvertising->setScanResponse(true);
-	pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
-	pAdvertising->setMinPreferred(0x12);
-	BLEDevice::startAdvertising();
-	Serial.println("Characteristic defined! Now you can read it in your phone!");
-}*/
+// Scheduler runnerSCH;
 void bluetooth_init() {
 	SerialBT.begin("Car Interface");
 	LOG_DEBUG("Bluetooth Started! Ready to pair...");
@@ -371,32 +336,13 @@ void setup() {
 		interfaceScreen.writeStr("page 0");
 	}
 	delay(50);
-	pthread_create(&nxt_thread, NULL, nextionScreenSendSCH, (void *) 0);
-	pthread_create(&sensors_thread, NULL, sensorAcqSCH, (void *) 1);
+	io_init();
+	pthread_create(&nxt_thread, NULL, nextion_screen_thread, (void *) 0);
+	pthread_create(&sensors_thread, NULL, sensor_acquisition_thread, (void *) 1);
 
 	//pthread_create(&interrupt_thread, NULL, interruptSCH, (void *) 2);
-	pthread_create(&bluetooth_thread, NULL, bluetooth_handler_loop, (void *) 3);
-// 	pthread_create(&threads[i], NULL, printThreadId, (void *)i);
-// 	pthread_t nxt_thread;
-// pthread_t sensors_thread;
-// pthread_t interrupt_thread;
-// pthread_t bluetooth_thread;
-// void *nextionScreenSendSCH();
-// void *sensorAcqSCH();
-// void *interruptSCH();
-// void *bluetooth_handler_loop();
+	pthread_create(&bluetooth_thread, NULL, bluetooth_handler_thread, (void *) 3);
 
-	// runnerSCH.init();
-	// LOG_DEBUG("Scheduler Initialized");
-	// runnerSCH.addTask(NXTTask);
-	// LOG_DEBUG("Nextion Task added");
-	// runnerSCH.addTask(sensorsTask);
-	// runnerSCH.addTask(interruptTask);
-	// runnerSCH.addTask(bluetooth_handler_task);
-	// NXTTask.enable();
-	// sensorsTask.enable();
-	// interruptTask.enable();
-	// bluetooth_handler_task.enable();
 	
 	
 	LOG_DEBUG("Configure ESP32 CAN");
@@ -417,10 +363,12 @@ void setup() {
 	// interfaceScreen.NextionListen();
 	// int current_page = interfaceScreen.currentPageId;
 	// LOG_DEBUG("Current Page: ", current_page);
-	io_init();
+	
+	led_sequence();
+
 
 }
-float voltage;
+int gpio_expander_index = -1;
 void loop() {
 
 	if (currentSensorData.lightLux.toFloat() <= ilumination_limits[0] - ilumination_hysteresis) {
@@ -450,7 +398,8 @@ void loop() {
 		}
 	}
 	delay(1000);
-	voltage = 0.00485 * analogRead(36) + 0.76864;
+
+
 	// LOG_DEBUG("Voltage:", voltage, "V");
 	// LOG_DEBUG("Light: ", currentSensorData.lightLux, "Gyro Temp: ", currentSensorData.gyroTemp, "Gyro Pitch: ", currentSensorData.gyroPitch, "Gyro Roll: ", currentSensorData.gyroRoll);
 
@@ -461,7 +410,7 @@ void loop() {
 
 
 
-void *nextionScreenSendSCH(void *threadid) {
+void *nextion_screen_thread(void *threadid) {
 	LOG_DEBUG("Thread Running on Core: ", xPortGetCoreID());
 	while (true) {
 		interfaceScreen.NextionListen();
@@ -492,6 +441,16 @@ void *nextionScreenSendSCH(void *threadid) {
 		delay(50);
 		//LOG_DEBUG("NXT Task");
 		//yield();
+		if (gpio_expander_index != -1) {
+		LOG_DEBUG("Current MAP Index:", gpio_expander_index, gpio_expander_io_map[gpio_expander_index].pin_function);
+		if (gpio_expander_io_map[gpio_expander_index].switch_index >= 0 && gpio_expander_io_map[gpio_expander_index].switch_index <= 99){
+			switches[gpio_expander_io_map[gpio_expander_index].switch_index].handle_switch_event(EXT_IO_LOCAL_BUTTON);
+		}
+		else {
+			LOG_DEBUG("Input not Implemented");
+		}
+		gpio_expander_index = -1;
+	}
 	}
 	return 0;
 }
@@ -555,6 +514,7 @@ void trigger1(){
 		for (int i = 0; i < sizeof(switches) / sizeof(switches[0]); i++) {
 			interfaceScreen.writeNum(String(switches[i].nextion_name + ".val"), (int)switches[i].state);
 			// handleSwitchEvent(i, GUI_DISPLAY);
+			delay(50);
 			switches[i].handle_switch_event(GUI_DISPLAY);
 			//digitalWrite(switches[i].pin, switches[i].state ^ switches[i].active_low);   //
 		}
@@ -591,7 +551,7 @@ void handle_input_interrupt_event(int gpio_expander_index) {
 	}
 }
 
-void *sensorAcqSCH(void *threadid) {
+void *sensor_acquisition_thread(void *threadid) {
 	LOG_DEBUG("Thread Running on Core: ", xPortGetCoreID());
 	float roll=0;
 	float pitch=0;
@@ -604,6 +564,12 @@ void *sensorAcqSCH(void *threadid) {
 			switch(interrupt_source) {
 				case GPIO_EXPANDER:
 				current_pin = io_expanders[gpio_expander_number].getLastInterruptPin();
+				LOG_DEBUG(current_pin);
+				current_pin = io_expanders[gpio_expander_number].getLastInterruptPin();
+				LOG_DEBUG(current_pin);
+				current_pin = io_expanders[gpio_expander_number].getLastInterruptPin();
+				LOG_DEBUG(current_pin);
+
 				current_value = io_expanders[gpio_expander_number].getCapturedInterrupt();
 				LOG_DEBUG("GPIO_EXPANDER ISR: ", gpio_expander_number, current_pin, current_value);
 				interrupt_trigger = false;
@@ -613,8 +579,14 @@ void *sensorAcqSCH(void *threadid) {
 					if (io_expanders[gpio_expander_number].getLastInterruptPin() == 255) break;
 					delay(100);
 				}
-				if (current_pin >= 0 && current_pin <= 15) handle_input_interrupt_event(current_pin + gpio_expander_hw[gpio_expander_number].BASE_INDEX);
+				// if (current_pin >= 0 && current_pin <= 15) handle_input_interrupt_event(current_pin + gpio_expander_hw[gpio_expander_number].BASE_INDEX);
+				// else LOG_ERROR("Index out of bound");
+				if (current_pin >= 0 && current_pin <= 15) gpio_expander_index = current_pin + gpio_expander_hw[gpio_expander_number].BASE_INDEX;
 				else LOG_ERROR("Index out of bound");
+
+
+
+
 				// if (current_pin >= GPIO_EXPANDER0_BASE_ADDRESS && current_pin < GPIO_EXPANDER0_BASE_ADDRESS + 16 && gpio_expander_io_map[current_pin].switch_index != -1) {
 				// 	LOG_DEBUG(switches[gpio_expander_io_map[current_pin].switch_index].nextion_name);
 				// 	halt = true;
@@ -631,8 +603,7 @@ void *sensorAcqSCH(void *threadid) {
 		delay(200);
 		halt = false;
 		} else {
-		
-			
+			currentSensorData.voltage = 0.00485 * analogRead(36) + 0.76864;
 			gyroSensor.getEvent(&a, &g, &temp);
 			roll=mapF(a.acceleration.y,-10,10,0,180);
 			pitch=mapF(a.acceleration.x,-5.55,5.55,PITCH_ORIGIN_Y+50,PITCH_ORIGIN_Y-50);
@@ -785,7 +756,7 @@ void sensors_init() {
 // 	return 0;
 	
 // }
-void *bluetooth_handler_loop(void *threadid) {
+void *bluetooth_handler_thread(void *threadid) {
 	LOG_DEBUG("Thread Running on Core: ", xPortGetCoreID());
 	String incoming_bluetooth;
 	while (true) {
@@ -812,4 +783,36 @@ void *bluetooth_handler_loop(void *threadid) {
 		delay(50);
 	}
 	return 0;
+}
+void led_sequence() {
+	gpio_defintions temp_gpio0;
+	gpio_defintions temp_gpio1;
+	int led_state = HIGH;
+	for (int j = 0; j < 2; j++){
+		for (int i = 0; i < 5; i++){
+			temp_gpio0 = gpio_expander_io_map[led_indecies[i]];
+			temp_gpio1 = gpio_expander_io_map[led_indecies[9 - i]];
+			delay(100);
+			// LOG_DEBUG(temp_gpio.pin_function);
+			io_expanders[temp_gpio0.gpio_expander].digitalWrite(temp_gpio0.pin_number, led_state);
+			io_expanders[temp_gpio1.gpio_expander].digitalWrite(temp_gpio1.pin_number, led_state);
+			
+		}
+		delay(500);
+		led_state = LOW;
+	}
+		// for (int i = 0; i < 5; i++){
+		// 	temp_gpio0 = gpio_expander_io_map[led_indecies[i]];
+		// 	temp_gpio1 = gpio_expander_io_map[led_indecies[9 - i]];
+		// 	delay(200);
+		// 	// LOG_DEBUG(temp_gpio.pin_function);
+		// 	io_expanders[temp_gpio0.gpio_expander].digitalWrite(temp_gpio0.pin_number, LOW);
+		// 	io_expanders[temp_gpio1.gpio_expander].digitalWrite(temp_gpio1.pin_number, LOW);
+			
+		// }
+	// for (int i = 9; i >= 0; i--){
+	// 	temp_gpio0 = gpio_expander_io_map[led_indecies[i]];
+	// 	io_expanders[temp_gpio0.gpio_expander].digitalWrite(temp_gpio0.pin_number, LOW);
+	// 	delay(100);
+	// }
 }

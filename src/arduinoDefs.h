@@ -30,6 +30,7 @@ struct gpio_defintions {
     bool interrupt_high;
     int switch_index;     
 };
+uint8_t led_indecies[] = {10, 11, 12, 13, 14, 15, 26, 27, 28, 29};
 struct gpio_defintions gpio_expander_io_map[] = {
     {0, "GPA0", "EXT_IN_GPIO1",     0,      INPUT,              false, false, -1},
     {0, "GPA1", "EXT_IN_GPIO2",     1,      INPUT,              false, false, -1},
@@ -48,15 +49,15 @@ struct gpio_defintions gpio_expander_io_map[] = {
     {0, "GPB6", "LED_GPIO_SW5",     14,     OUTPUT,             false, false, -1},
     {0, "GPB7", "LED_GPIO_SW6",     15,     OUTPUT,             false, false, -1},
     {1, "GPA0", "EXT_SW_GPIO1",     0,      INPUT,              true, false, 0},
-    {1, "GPA1", "EXT_SW_GPIO2",     1,      INPUT,              false, false, 1},
-    {1, "GPA2", "EXT_SW_GPIO3",     2,      INPUT,              false, false, 2},
-    {1, "GPA3", "EXT_SW_GPIO4",     3,      INPUT,              false, false, 3},
-    {1, "GPA4", "EXT_SW_GPIO5",     4,      INPUT,              false, false, 4},
-    {1, "GPA5", "EXT_SW_GPIO6",     5,      INPUT,              false, false, -1},
-    {1, "GPA6", "EXT_SW_GPIO7",     6,      INPUT,              false, false, -1},
-    {1, "GPA7", "EXT_SW_GPIO8",     7,      INPUT,              false, false, -1},
-    {1, "GPB0", "EXT_SW_GPIO9",     8,      INPUT,              false, false, -1},
-    {1, "GPB1", "EXT_SW_GPIO10",    9,      INPUT,              false, false, -1},
+    {1, "GPA1", "EXT_SW_GPIO2",     1,      INPUT,              true, false, 1},
+    {1, "GPA2", "EXT_SW_GPIO3",     2,      INPUT,              true, false, 2},
+    {1, "GPA3", "EXT_SW_GPIO4",     3,      INPUT,              true, false, 3},
+    {1, "GPA4", "EXT_SW_GPIO5",     4,      INPUT,              true, false, 4},
+    {1, "GPA5", "EXT_SW_GPIO6",     5,      INPUT,              true, false, -1},
+    {1, "GPA6", "EXT_SW_GPIO7",     6,      INPUT,              true, false, -1},
+    {1, "GPA7", "EXT_SW_GPIO8",     7,      INPUT,              true, false, -1},
+    {1, "GPB0", "EXT_SW_GPIO9",     8,      INPUT,              true, false, -1},
+    {1, "GPB1", "EXT_SW_GPIO10",    9,      INPUT,              true, false, -1},
     {1, "GPB2", "LED_GPIO_SW7",     10,     OUTPUT,             false, false, -1},
     {1, "GPB3", "LED_GPIO_SW8",     11,     OUTPUT,             false, false, -1},
     {1, "GPB4", "LED_GPIO_SW9",     12,     OUTPUT,             false, false, -1},
