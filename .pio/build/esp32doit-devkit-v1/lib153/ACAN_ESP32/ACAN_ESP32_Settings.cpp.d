@@ -1,0 +1,22 @@
+.pio/build/esp32doit-devkit-v1/lib153/ACAN_ESP32/ACAN_ESP32_Settings.cpp.o: \
+ .pio/libdeps/esp32doit-devkit-v1/ACAN_ESP32/src/ACAN_ESP32_Settings.cpp \
+ .pio/libdeps/esp32doit-devkit-v1/ACAN_ESP32/src/ACAN_ESP32_Settings.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/driver/include/driver/adc.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/esp_common/include/esp_err.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/esp_common/include/esp_compiler.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/driver/include/driver/gpio.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/esp_hw_support/include/esp_intr_alloc.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/esp_common/include/esp_types.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/esp_common/include/esp_bit_defs.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/esp_common/include/esp_attr.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/soc/esp32/include/soc/soc_caps.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/soc/include/soc/gpio_periph.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/soc/esp32/include/soc/io_mux_reg.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/soc/esp32/include/soc/soc.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/esp_common/include/esp_assert.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/soc/esp32/include/soc/gpio_struct.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/soc/esp32/include/soc/gpio_reg.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/soc/esp32/include/soc/gpio_sig_map.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/hal/include/hal/gpio_types.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/esp_rom/include/esp32/rom/gpio.h \
+ C:/Users/nasir/.platformio/packages/framework-arduinoespressif32@3.20003.220626/tools/sdk/esp32/include/hal/include/hal/adc_types.h

@@ -20,6 +20,7 @@
 #include <core_version.h>
 #include "soc/rtc_wdt.h"
 #include <pthread.h>
+#include <esp_sleep.h>
 
 #include "BluetoothSerial.h"
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
@@ -70,14 +71,18 @@ struct sensorData {
 	float voltage;
 };
 ////////////////////////////////
-
+struct test_message {
+	char message_id[2];
+	char message[20];
+};
+QueueHandle_t test_queue;
 ////////////////////////////////
 ///////////Switches/////////////
 ////////////////////////////////
 class Switch {
 	public:
-		String nextion_name;
-		int nextion_type;
+		String display_name;
+		int display_type;
 		bool state;
 		bool active_low;
 		int pin_location;
@@ -87,9 +92,9 @@ class Switch {
 		int output_pin;
 		int physical_type;
 		String switch_function;
-		Switch(String nextion_name, int nextion_type, bool state, bool active_low, int pin_location, int address, int input_pin, int output_led, int output_pin, int physical_type, String switch_function) {
-			this -> nextion_name = nextion_name;
-			this -> nextion_type = nextion_type;
+		Switch(String display_name, int display_type, bool state, bool active_low, int pin_location, int address, int input_pin, int output_led, int output_pin, int physical_type, String switch_function) {
+			this -> display_name = display_name;
+			this -> display_type = display_type;
 			this -> state = state;
 			this -> active_low = active_low;
 			this -> pin_location = pin_location;
@@ -109,9 +114,9 @@ class Switch {
 				
 				delay(50);
 				
-				while (interfaceScreen.readNumber(String(nextion_name + ".val")) != (int) state) {
-					interfaceScreen.writeNum(String(nextion_name + ".val"), (int)state);
-					LOG_DEBUG("Screen Current Value: ", interfaceScreen.readNumber(String(nextion_name + ".val")));
+				while (interfaceScreen.readNumber(String(display_name + ".val")) != (int) state) {
+					interfaceScreen.writeNum(String(display_name + ".val"), (int)state);
+					LOG_DEBUG("Screen Current Value: ", interfaceScreen.readNumber(String(display_name + ".val")));
 				}
 				
 				break;
@@ -143,6 +148,7 @@ class Switch {
 				digitalWrite(output_pin, state ^ active_low);
 				break;
 			}
+			LOG_DEBUG("Stack High Mark:", uxTaskGetStackHighWaterMark(NULL));
 			return true;
 		}
 
@@ -164,6 +170,7 @@ bool interrupt_trigger = false;
 interrupt_sources interrupt_source;
 int gpio_pin;
 int gpio_expander_number;
+int8_t screen_on_off = -1;
 
 ////////////////////////////////
 ///////Function Definitions/////
@@ -190,7 +197,9 @@ int ilumination_limits[] = {300, 500};
 uint8_t ilumination_hysteresis = 25;
 ilumination_states ilumination_current_state = NIGHT;
 ilumination_states ilumination_previous_state = NIGHT;
-int NXTpage=1;
+ignition_states ignition_current_state = IGNITION_INIT;
+ignition_states ignition_previous_state = IGNITION_INIT;
+int NXTpage = 1;
 //  CAN ESP32 Desired Bit Rate
 // static const uint32_t DESIRED_BIT_RATE = 1000UL * 250UL ; // 250 Kb/s
 
@@ -201,7 +210,6 @@ int NXTpage=1;
 ////////////////////////////////
 void *nextion_screen_thread(void *threadid);
 void *sensor_acquisition_thread(void *threadid);
-// void *interruptSCH(void *threadid);
 void *bluetooth_handler_thread(void *threadid);
 pthread_t nxt_thread;
 pthread_t sensors_thread;
@@ -214,8 +222,10 @@ pthread_t bluetooth_thread;
 void bluetooth_init() {
 	SerialBT.begin("Car Interface");
 	LOG_DEBUG("Bluetooth Started! Ready to pair...");
-	
 }
+// void go_to_sleep() {
+
+// }
 void io_init() {
 	LOG_DEBUG("Initializing IOs");
 	int gpio_map_size = sizeof(gpio_expander_io_map) / sizeof(gpio_defintions);
@@ -321,28 +331,44 @@ void io_init() {
 
 }
 void setup() {
+	test_queue = xQueueCreate( 10, sizeof(struct test_message) );
 	// initialize both serial ports:
 	
 	Serial.begin(115200);
 	Wire1.begin(GPIO_I2C_SDA, GPIO_I2C_SCL);
 	// Serial1.begin(9600);
 	interfaceScreen.begin(9600);
-	Serial.println("Car Interface Test");
+	Serial.println("Car Interface");
 	bluetooth_init();
+	
 	
 	
 	sensors_init();
 	while (interfaceScreen.readNumber("dp") != 0) {
+		interfaceScreen.writeNum("sleep", 0);
 		interfaceScreen.writeStr("page 0");
 	}
+	pthread_attr_t attr;
+	size_t stacksize;
+	pthread_attr_init(&attr);
+	pthread_attr_getstacksize(&attr, &stacksize);
+	LOG_DEBUG("Max pthread stack size Before:", stacksize);
+	stacksize = stacksize + 1024;
+	// stacksize = stacksize * 2;
+	pthread_attr_setstacksize(&attr, stacksize);
+
+	pthread_attr_getstacksize(&attr, &stacksize);
+	LOG_DEBUG("Max pthread stack size After:", stacksize);
+	
 	delay(50);
 	io_init();
-	pthread_create(&nxt_thread, NULL, nextion_screen_thread, (void *) 0);
-	pthread_create(&sensors_thread, NULL, sensor_acquisition_thread, (void *) 1);
-
-	//pthread_create(&interrupt_thread, NULL, interruptSCH, (void *) 2);
-	pthread_create(&bluetooth_thread, NULL, bluetooth_handler_thread, (void *) 3);
-
+	delay(50);
+	pthread_create(&nxt_thread, &attr, nextion_screen_thread, (void *) 0);
+	delay(50);
+	pthread_create(&sensors_thread, &attr, sensor_acquisition_thread, (void *) 1);
+	delay(50);
+	pthread_create(&bluetooth_thread, &attr, bluetooth_handler_thread, (void *) 2);
+	
 	
 	
 	LOG_DEBUG("Configure ESP32 CAN");
@@ -350,12 +376,14 @@ void setup() {
 	//settings.mRxPin = GPIO_NUM_4 ; // Optional, default Tx pin is GPIO_NUM_4
 	//settings.mTxPin = GPIO_NUM_5 ; // Optional, default Rx pin is GPIO_NUM_5
 	// TODO: Change CAN to Normal Mode for transmission error handling, would require changing the switch event class method
-	settings.mRequestedCANMode = ACAN_ESP32_Settings::LoopBackMode ;
+	// settings.mRequestedCANMode = ACAN_ESP32_Settings::LoopBackMode ;
+	settings.mRequestedCANMode = ACAN_ESP32_Settings::NormalMode ;
+
 	const uint32_t errorCode = ACAN_ESP32::can.begin (settings) ;
 	
 	if (errorCode == 0) {
 		LOG_DEBUG("Configuration ESP32 OK!");
-	}else{
+	}else {
 		LOG_ERROR("Configuration error");
 		LOG_ERROR(errorCode, HEX);
 	}
@@ -368,9 +396,17 @@ void setup() {
 
 
 }
+struct test_message recv_message;
 int gpio_expander_index = -1;
+char test_char[20];
 void loop() {
-
+	recv_message.message[20] = {NULL};
+	if (uxQueueMessagesWaiting(test_queue) > 0) {
+		xQueueReceive(test_queue, &(recv_message), (TickType_t) 10);
+		strcpy(test_char, recv_message.message);
+		LOG_DEBUG("Message Receieved:", test_char);
+		strcpy(test_char, "");
+	}
 	if (currentSensorData.lightLux.toFloat() <= ilumination_limits[0] - ilumination_hysteresis) {
 		ilumination_current_state = NIGHT;
 	}
@@ -397,7 +433,41 @@ void loop() {
 
 		}
 	}
-	delay(1000);
+
+	if (digitalRead(IGNITION_PIN)) ignition_current_state = IGNITION_OFF;
+	else ignition_current_state = IGNITION_ON;
+	if (ignition_current_state != ignition_previous_state) {
+		switch(ignition_current_state) {
+			case IGNITION_ON:
+			LOG_DEBUG("Ignition On");
+			ignition_previous_state = IGNITION_ON;
+			screen_on_off = 1;
+			break;
+			case IGNITION_OFF:
+			LOG_DEBUG("Ignition Off");
+			ignition_previous_state = IGNITION_OFF;
+			for (int i = 0; i < sizeof(switches) / sizeof(switches[0]); i++) {
+				interfaceScreen.writeNum(String(switches[i].display_name + ".val"), (int)false);
+				// handleSwitchEvent(i, GUI_DISPLAY);
+				switches[i].state = false;
+				delay(50);
+				switches[i].handle_switch_event(GUI_DISPLAY);
+				//digitalWrite(switches[i].pin, switches[i].state ^ switches[i].active_low);   //
+			}
+			screen_on_off = 2;
+			gpio_wakeup_enable(GPIO_NUM_19, GPIO_INTR_LOW_LEVEL);
+    		esp_sleep_enable_gpio_wakeup();
+			delay(500);
+     		esp_light_sleep_start();
+			ESP.deepSleep(1000000);
+			ESP.restart();
+			break;
+		}
+	}
+	
+	// delay(50);
+	// LOG_DEBUG("[APP] Free memory:", esp_get_free_heap_size(), "bytes");
+
 
 
 	// LOG_DEBUG("Voltage:", voltage, "V");
@@ -407,14 +477,36 @@ void loop() {
 
 }
 
+// enum task_list{
+// 	SEND_CAN
+// };
+// task_list current_task;
 
+// void *task_handler(void *threadid) {
+// 	while(true) {
+// 		switch (current_task) {
+// 			case SEND_CAN:
 
-
+// 			break;
+// 		}
+// 	}
+// }
+// TODO: [ORC-18] Issue with Stack, getting a stack overflow
 void *nextion_screen_thread(void *threadid) {
 	LOG_DEBUG("Thread Running on Core: ", xPortGetCoreID());
 	while (true) {
 		interfaceScreen.NextionListen();
-		NXTpage=interfaceScreen.currentPageId;
+		if (screen_on_off == 1) {
+			interfaceScreen.writeNum("sleep", 0);
+			LOG_DEBUG("SCREEN_ON");
+			screen_on_off = -1;
+		}
+		if (screen_on_off == 2) {
+			interfaceScreen.writeNum("sleep", 1);
+			LOG_DEBUG("SCREEN_OFF");
+			screen_on_off = -1;
+		}
+		NXTpage = interfaceScreen.currentPageId;
 		switch (NXTpage) {
 		case SPLASH:
 			//Serial.println("NXT Page 0");
@@ -442,15 +534,13 @@ void *nextion_screen_thread(void *threadid) {
 		//LOG_DEBUG("NXT Task");
 		//yield();
 		if (gpio_expander_index != -1) {
-		LOG_DEBUG("Current MAP Index:", gpio_expander_index, gpio_expander_io_map[gpio_expander_index].pin_function);
-		if (gpio_expander_io_map[gpio_expander_index].switch_index >= 0 && gpio_expander_io_map[gpio_expander_index].switch_index <= 99){
-			switches[gpio_expander_io_map[gpio_expander_index].switch_index].handle_switch_event(EXT_IO_LOCAL_BUTTON);
+			LOG_DEBUG("Current MAP Index:", gpio_expander_index, gpio_expander_io_map[gpio_expander_index].pin_function);
+			if (gpio_expander_io_map[gpio_expander_index].switch_index >= 0 && gpio_expander_io_map[gpio_expander_index].switch_index <= 99){
+				switches[gpio_expander_io_map[gpio_expander_index].switch_index].handle_switch_event(EXT_IO_LOCAL_BUTTON);
+				LOG_DEBUG("Stack High Mark:", uxTaskGetStackHighWaterMark(NULL));
+			} else LOG_DEBUG("Input not Implemented");
+			gpio_expander_index = -1;
 		}
-		else {
-			LOG_DEBUG("Input not Implemented");
-		}
-		gpio_expander_index = -1;
-	}
 	}
 	return 0;
 }
@@ -465,16 +555,16 @@ void trigger0(){
 	halt = true;
 	String tempLog;
 	if (sw != -1) {
-		switch(switches[sw].nextion_type) {
+		switch(switches[sw].display_type) {
 		case TOGGLE:
-			switches[sw].state = interfaceScreen.readNumber(String(switches[sw].nextion_name + ".val"));
+			switches[sw].state = interfaceScreen.readNumber(String(switches[sw].display_name + ".val"));
 			tempLog = "";
 			tempLog.concat("Toggle Switch - Index: ");
 			tempLog.concat(sw);
 			tempLog.concat(" - Value: ");
 			tempLog.concat(switches[sw].state);
 			tempLog.concat(" - Switch Name: ");
-			tempLog.concat(String(switches[sw].nextion_name + ".val"));
+			tempLog.concat(String(switches[sw].display_name + ".val"));
 			tempLog.concat(" - Active Low: ");
 			tempLog.concat(switches[sw].active_low);
 			LOG_DEBUG(tempLog);
@@ -494,7 +584,7 @@ void trigger0(){
 void indexSWError() {
 	LOG_ERROR("indexSWError - Error Occurred, Reinitializing Switches");
 	for (int i = 0; i < sizeof(switches) / sizeof(switches[0]); i++) {
-		interfaceScreen.writeNum(String(switches[i].nextion_name + ".val"), (int)switches[i].state);
+		interfaceScreen.writeNum(String(switches[i].display_name + ".val"), (int)switches[i].state);
 	}
 }
 
@@ -502,7 +592,7 @@ void indexSWError() {
 void trigger1(){
 	//Page Init
 	interfaceScreen.NextionListen();
-	NXTpage=interfaceScreen.currentPageId;
+	NXTpage = interfaceScreen.currentPageId;
 	delay(50);
 	switch (NXTpage) {
 	case SPLASH:
@@ -512,7 +602,7 @@ void trigger1(){
 		//Init Switches
 		LOG_DEBUG("trigger1 - Initializing Switches");
 		for (int i = 0; i < sizeof(switches) / sizeof(switches[0]); i++) {
-			interfaceScreen.writeNum(String(switches[i].nextion_name + ".val"), (int)switches[i].state);
+			interfaceScreen.writeNum(String(switches[i].display_name + ".val"), (int)switches[i].state);
 			// handleSwitchEvent(i, GUI_DISPLAY);
 			delay(50);
 			switches[i].handle_switch_event(GUI_DISPLAY);
@@ -550,7 +640,7 @@ void handle_input_interrupt_event(int gpio_expander_index) {
 		switches[gpio_expander_io_map[gpio_expander_index].switch_index].handle_switch_event(EXT_IO_LOCAL_BUTTON);
 	}
 }
-
+struct test_message tx_message;
 void *sensor_acquisition_thread(void *threadid) {
 	LOG_DEBUG("Thread Running on Core: ", xPortGetCoreID());
 	float roll=0;
@@ -569,6 +659,7 @@ void *sensor_acquisition_thread(void *threadid) {
 				LOG_DEBUG(current_pin);
 				current_pin = io_expanders[gpio_expander_number].getLastInterruptPin();
 				LOG_DEBUG(current_pin);
+				LOG_DEBUG("Stack High Mark:", uxTaskGetStackHighWaterMark(NULL));
 
 				current_value = io_expanders[gpio_expander_number].getCapturedInterrupt();
 				LOG_DEBUG("GPIO_EXPANDER ISR: ", gpio_expander_number, current_pin, current_value);
@@ -579,8 +670,18 @@ void *sensor_acquisition_thread(void *threadid) {
 					if (io_expanders[gpio_expander_number].getLastInterruptPin() == 255) break;
 					delay(100);
 				}
+				tx_message.message[20] = {NULL};
+				strcpy(tx_message.message, "Nasir Aladdin - 1");
+				strcpy(tx_message.message_id, "N");
+				LOG_DEBUG("Sending:", tx_message.message);
+				xQueueSend( test_queue,  (void *) &tx_message, ( TickType_t ) 10 );
 				// if (current_pin >= 0 && current_pin <= 15) handle_input_interrupt_event(current_pin + gpio_expander_hw[gpio_expander_number].BASE_INDEX);
 				// else LOG_ERROR("Index out of bound");
+				tx_message.message[20] = {NULL};
+				strcpy(tx_message.message, "Nasir Aladdin - 2");
+				strcpy(tx_message.message_id, "N");
+				LOG_DEBUG("Sending:", tx_message.message);
+				xQueueSend( test_queue,  (void *) &tx_message, ( TickType_t ) 10 );
 				if (current_pin >= 0 && current_pin <= 15) gpio_expander_index = current_pin + gpio_expander_hw[gpio_expander_number].BASE_INDEX;
 				else LOG_ERROR("Index out of bound");
 
@@ -588,7 +689,7 @@ void *sensor_acquisition_thread(void *threadid) {
 
 
 				// if (current_pin >= GPIO_EXPANDER0_BASE_ADDRESS && current_pin < GPIO_EXPANDER0_BASE_ADDRESS + 16 && gpio_expander_io_map[current_pin].switch_index != -1) {
-				// 	LOG_DEBUG(switches[gpio_expander_io_map[current_pin].switch_index].nextion_name);
+				// 	LOG_DEBUG(switches[gpio_expander_io_map[current_pin].switch_index].display_name);
 				// 	halt = true;
 				// 	switches[gpio_expander_io_map[current_pin].switch_index].handle_switch_event(EXT_IO_LOCAL_BUTTON);
 				// } else {
@@ -738,7 +839,7 @@ void sensors_init() {
 // 					delay(100);
 // 				}
 // 				if (current_pin >= GPIO_EXPANDER0_BASE_ADDRESS && current_pin < GPIO_EXPANDER0_BASE_ADDRESS + 16 && gpio_expander_io_map[current_pin].switch_index != -1) {
-// 					LOG_DEBUG(switches[gpio_expander_io_map[current_pin].switch_index].nextion_name);
+// 					LOG_DEBUG(switches[gpio_expander_io_map[current_pin].switch_index].display_name);
 // 					switches[gpio_expander_io_map[current_pin].switch_index].handle_switch_event(EXT_IO_LOCAL_BUTTON);
 // 				} else {
 // 					LOG_ERROR("Index out of bound");
@@ -768,6 +869,7 @@ void *bluetooth_handler_thread(void *threadid) {
 			incoming_bluetooth = SerialBT.readStringUntil(0x0A);
 			LOG_DEBUG(incoming_bluetooth.substring(0, 2));
 			LOG_DEBUG(incoming_bluetooth.substring(2, 4));
+			LOG_DEBUG("Stack High Mark:", uxTaskGetStackHighWaterMark(NULL));
 			if (incoming_bluetooth.substring(0, 2) == "SW") {
 				// int index = (int) incoming_bluetooth.substring(2, 3).toInt();
 				halt = true;

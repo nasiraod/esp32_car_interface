@@ -119,6 +119,11 @@ enum interrupt_sources {
     GPIO_EXPANDER1,
     GPIO_EXPANDER2
 };
+enum ignition_states{
+	IGNITION_INIT,
+    IGNITION_OFF,
+	IGNITION_ON
+};
 
 
 
