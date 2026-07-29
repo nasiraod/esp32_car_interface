@@ -6,6 +6,12 @@
 # PlatformIO build output and downloaded toolchains/libraries
 .pio/
 
+# PlatformIO auto-generated, machine-specific IDE files
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/.browse.c_cpp.db*
+.vscode/ipch
+
 # Node artifact files
 node_modules/
 dist/
